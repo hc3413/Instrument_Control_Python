@@ -75,7 +75,7 @@ class E4890A(LCR):
     DEFAULT_BIAS = 0
     DEFAULT_FREQUENCY = 100
     DEFAULT_SIGNAL_AMPLITUDE = 1
-    DEFAULT_MEASUREMENT_TIMEOUT = 3
+    DEFAULT_MEASUREMENT_TIMEOUT = 10  # Increased from 3 to 10 seconds
     DEFAULT_ALC_ENABLED = True
     DEFAULT_MEASURMENT_TYPE = MeasurementType.RX
     DEFAULT_SIGNAL_TYPE = SignalType.VOLTAGE
@@ -146,6 +146,7 @@ class E4890A(LCR):
             raise ValueError("measurement time must be SHORT, MEDIUM or LONG")
         self._measurement_time = time
         self.resource.write(f"APER {self._measurement_time.value}, {self._averages}")
+        self._update_timeout()
     
     @property
     def averages(self):
@@ -157,6 +158,20 @@ class E4890A(LCR):
             raise ValueError("number of averages must be between 1 and 256")
         self._averages = averages
         self.resource.write(f"APER {self._measurement_time.value}, {self._averages}")
+        self._update_timeout()
+    
+    def _update_timeout(self):
+        """Automatically adjust timeout based on measurement time and averages."""
+        # Base times: SHORT=0.02s, MEDIUM=0.2s, LONG=2s per measurement
+        base_times = {
+            E4890A.MeasurementTime.SHORT: 0.02,
+            E4890A.MeasurementTime.MEDIUM: 0.2,
+            E4890A.MeasurementTime.LONG: 2.0
+        }
+        base_time = base_times.get(self._measurement_time, 0.2)
+        # Calculate timeout: (base_time * averages) + 2 second buffer, minimum 5 seconds
+        timeout = max(5.0, (base_time * self._averages) + 2.0)
+        self.resource.timeout = int(timeout * 1000)  # Convert to milliseconds
 
     @property
     def bias(self):
