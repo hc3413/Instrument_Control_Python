@@ -17,7 +17,10 @@ from .procedures import DummyProcedure
 from .utils import (
     set_temperature_and_wait, 
     set_bias_and_wait,
-    sweep_frequency_lcr
+    sweep_frequency_lcr,
+    load_measurement_files,
+    plot_all_measurements,
+    plot_measurement_comparison
 )
 
 __all__ = [
@@ -29,4 +32,7 @@ __all__ = [
     'set_temperature_and_wait',
     'set_bias_and_wait',
     'sweep_frequency_lcr',
+    'load_measurement_files',
+    'plot_all_measurements',
+    'plot_measurement_comparison',
 ]

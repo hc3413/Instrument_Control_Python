@@ -77,8 +77,8 @@ def sweep_frequency_lcr(temp_controller, lcr, frequency_points, output_file, ver
         result = lcr.measurement  # Returns [Z, theta] for ZTD mode
         curr_temp = temp_controller.temperature
         
-        # Format: time,bias,frequency,NA,Z,theta with trailing comma
-        data = f"{time.time()},{lcr.bias},{freq},-1,{result[0]},{result[1]},\n"
+        # Format: time,bias,frequency,NA,Z,theta (no trailing comma)
+        data = f"{time.time()},{lcr.bias},{freq},-1,{result[0]},{result[1]}\n"
         output_file.write(data)
         output_file.flush()
         
@@ -336,3 +336,167 @@ def settle_at_start_temp(measurement_manager, start_temp):
     measurement_manager.ppms.temperature_setpoint = (start_temp, 10, 0)
     while not measurement_manager.ppms.temperature_stable:
         time.sleep(5)
+
+
+# =============================================================================
+# Data Loading and Plotting Utilities
+# =============================================================================
+
+def load_measurement_files(data_dir, pattern="run*.csv"):
+    """
+    Load all measurement CSV files from a directory.
+    
+    Args:
+        data_dir (str): Path to data directory
+        pattern (str): Glob pattern for files (default: "run*.csv")
+        
+    Returns:
+        list: List of tuples (filename, dataframe)
+    """
+    import glob
+    import pandas as pd
+    from pathlib import Path
+    
+    data_path = Path(data_dir)
+    files = sorted(data_path.glob(pattern))
+    
+    datasets = []
+    for file in files:
+        try:
+            # Read CSV, skip comment lines, proper column names
+            df = pd.read_csv(file, comment='#', 
+                           names=['time', 'bias', 'frequency', 'NA', 'Z', 'theta'],
+                           skipinitialspace=True)
+            # Drop any empty/NaN columns
+            df = df.dropna(axis=1, how='all')
+            datasets.append((file.name, df))
+        except Exception as e:
+            print(f"Warning: Could not load {file.name}: {e}")
+    
+    return datasets
+
+
+def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10)):
+    """
+    Plot all measurement files on the same figure with different colors.
+    
+    Creates a 2x2 plot showing:
+    - Top left: Impedance magnitude vs frequency (all files)
+    - Top right: Phase vs frequency (all files)
+    - Bottom left: Impedance magnitude (selected file)
+    - Bottom right: Phase (selected file)
+    
+    Args:
+        data_dir (str): Path to data directory
+        pattern (str): Glob pattern for files (default: "run*.csv")
+        figsize (tuple): Figure size (width, height)
+        
+    Returns:
+        fig, axes, datasets
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    
+    datasets = load_measurement_files(data_dir, pattern)
+    
+    if not datasets:
+        print(f"No data files found in {data_dir}")
+        return None, None, None
+    
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=figsize)
+    
+    # Color map for multiple files
+    colors = plt.cm.viridis(np.linspace(0, 0.9, len(datasets)))
+    
+    # Plot all files
+    for (filename, df), color in zip(datasets, colors):
+        # Extract metadata from filename or dataframe
+        temp = df['bias'].iloc[0] if 'bias' in df.columns else 0
+        label = filename.replace('.csv', '')
+        
+        # Top row: All files overlaid
+        ax1.loglog(df['frequency'], df['Z'], '-', color=color, linewidth=1.5, 
+                   label=label, alpha=0.7)
+        ax2.semilogx(df['frequency'], df['theta'], '-', color=color, linewidth=1.5,
+                    label=label, alpha=0.7)
+    
+    # Configure top plots (all files)
+    ax1.set_xlabel('Frequency (Hz)', fontsize=11)
+    ax1.set_ylabel('|Z| (Ω)', fontsize=11)
+    ax1.set_title('Impedance Magnitude - All Files', fontsize=12, fontweight='bold')
+    ax1.grid(True, alpha=0.3, which='both')
+    ax1.legend(fontsize=8, loc='best', framealpha=0.9)
+    
+    ax2.set_xlabel('Frequency (Hz)', fontsize=11)
+    ax2.set_ylabel('Phase θ (°)', fontsize=11)
+    ax2.set_title('Phase - All Files', fontsize=12, fontweight='bold')
+    ax2.grid(True, alpha=0.3)
+    ax2.legend(fontsize=8, loc='best', framealpha=0.9)
+    
+    # Bottom row: Latest file in detail
+    latest_file, latest_df = datasets[-1]
+    
+    ax3.loglog(latest_df['frequency'], latest_df['Z'], 'b-', linewidth=2)
+    ax3.set_xlabel('Frequency (Hz)', fontsize=11)
+    ax3.set_ylabel('|Z| (Ω)', fontsize=11)
+    ax3.set_title(f'Latest: {latest_file}', fontsize=12, fontweight='bold')
+    ax3.grid(True, alpha=0.3, which='both')
+    
+    ax4.semilogx(latest_df['frequency'], latest_df['theta'], 'r-', linewidth=2)
+    ax4.set_xlabel('Frequency (Hz)', fontsize=11)
+    ax4.set_ylabel('Phase θ (°)', fontsize=11)
+    ax4.set_title(f'Latest: {latest_file}', fontsize=12, fontweight='bold')
+    ax4.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    print(f"\n✓ Plotted {len(datasets)} files from {data_dir}")
+    return fig, (ax1, ax2, ax3, ax4), datasets
+
+
+def plot_measurement_comparison(data_dir, file_indices=None, figsize=(14, 5)):
+    """
+    Plot specific measurement files for comparison.
+    
+    Args:
+        data_dir (str): Path to data directory
+        file_indices (list): List of file indices to plot (None = all files)
+        figsize (tuple): Figure size
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    
+    datasets = load_measurement_files(data_dir)
+    
+    if not datasets:
+        print(f"No data files found in {data_dir}")
+        return
+    
+    if file_indices is not None:
+        datasets = [datasets[i] for i in file_indices if i < len(datasets)]
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+    colors = plt.cm.tab10(np.linspace(0, 0.9, len(datasets)))
+    
+    for (filename, df), color in zip(datasets, colors):
+        label = filename.replace('.csv', '')
+        ax1.loglog(df['frequency'], df['Z'], '-', color=color, linewidth=2, 
+                   label=label, marker='o', markersize=3, alpha=0.7)
+        ax2.semilogx(df['frequency'], df['theta'], '-', color=color, linewidth=2,
+                    label=label, marker='o', markersize=3, alpha=0.7)
+    
+    ax1.set_xlabel('Frequency (Hz)', fontsize=12)
+    ax1.set_ylabel('|Z| (Ω)', fontsize=12)
+    ax1.set_title('Impedance Magnitude Comparison', fontsize=13, fontweight='bold')
+    ax1.grid(True, alpha=0.3, which='both')
+    ax1.legend(fontsize=10, loc='best')
+    
+    ax2.set_xlabel('Frequency (Hz)', fontsize=12)
+    ax2.set_ylabel('Phase θ (°)', fontsize=12)
+    ax2.set_title('Phase Comparison', fontsize=13, fontweight='bold')
+    ax2.grid(True, alpha=0.3)
+    ax2.legend(fontsize=10, loc='best')
+    
+    plt.tight_layout()
+    plt.show()
