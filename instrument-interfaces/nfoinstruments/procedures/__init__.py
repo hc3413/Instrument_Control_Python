@@ -10,7 +10,18 @@ Modules:
     - utils: Helper functions for measurements
 """
 
-from .measurement import Measurement
+# Try to import Measurement class, but make it optional if tkinter is not available
+try:
+    from .measurement import Measurement
+except (ImportError, ModuleNotFoundError):
+    Measurement = None
+    import warnings
+    warnings.warn(
+        "Measurement class not available (tkinter not installed). "
+        "This is okay if you're only using the utility functions.",
+        ImportWarning
+    )
+
 from .lcr import ISProcedurePPMS, ISProcedureConstTemp
 from .impedance_analyzer import IAProcedure
 from .procedures import DummyProcedure
