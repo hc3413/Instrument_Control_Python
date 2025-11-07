@@ -397,7 +397,7 @@ def load_measurement_files(data_dir, pattern="run*.csv"):
     return datasets
 
 
-def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10)):
+def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10), show_legend=True):
     """
     Plot all measurement files on the same figure with different colors.
     
@@ -411,6 +411,7 @@ def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10)):
         data_dir (str): Path to data directory
         pattern (str): Glob pattern for files (default: "run*.csv")
         figsize (tuple): Figure size (width, height)
+        show_legend (bool): Whether to display legend (default: True)
         
     Returns:
         fig, axes, datasets
@@ -433,7 +434,7 @@ def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10)):
     for (filename, df), color in zip(datasets, colors):
         # Extract metadata from filename or dataframe
         temp = df['bias'].iloc[0] if 'bias' in df.columns else 0
-        label = filename.replace('.csv', '')
+        label = filename.replace('.csv', '') if show_legend else None
         
         # Top row: All files overlaid
         ax1.loglog(df['frequency'], df['Z'], '-', color=color, linewidth=1.5, 
@@ -446,13 +447,15 @@ def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10)):
     ax1.set_ylabel('|Z| (Ω)', fontsize=11)
     ax1.set_title('Impedance Magnitude - All Files', fontsize=12, fontweight='bold')
     ax1.grid(True, alpha=0.3, which='both')
-    ax1.legend(fontsize=8, loc='best', framealpha=0.9)
+    if show_legend:
+        ax1.legend(fontsize=8, loc='best', framealpha=0.9)
     
     ax2.set_xlabel('Frequency (Hz)', fontsize=11)
     ax2.set_ylabel('Phase θ (°)', fontsize=11)
     ax2.set_title('Phase - All Files', fontsize=12, fontweight='bold')
     ax2.grid(True, alpha=0.3)
-    ax2.legend(fontsize=8, loc='best', framealpha=0.9)
+    if show_legend:
+        ax2.legend(fontsize=8, loc='best', framealpha=0.9)
     
     # Bottom row: Latest file in detail
     latest_file, latest_df = datasets[-1]
@@ -476,7 +479,7 @@ def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10)):
     return fig, (ax1, ax2, ax3, ax4), datasets
 
 
-def plot_measurement_comparison(data_dir, file_indices=None, figsize=(14, 5)):
+def plot_measurement_comparison(data_dir, file_indices=None, figsize=(14, 5), show_legend=True):
     """
     Plot specific measurement files for comparison.
     
@@ -484,6 +487,7 @@ def plot_measurement_comparison(data_dir, file_indices=None, figsize=(14, 5)):
         data_dir (str): Path to data directory
         file_indices (list): List of file indices to plot (None = all files)
         figsize (tuple): Figure size
+        show_legend (bool): Whether to display legend (default: True)
     """
     import matplotlib.pyplot as plt
     import numpy as np
@@ -501,7 +505,7 @@ def plot_measurement_comparison(data_dir, file_indices=None, figsize=(14, 5)):
     colors = plt.cm.tab10(np.linspace(0, 0.9, len(datasets)))
     
     for (filename, df), color in zip(datasets, colors):
-        label = filename.replace('.csv', '')
+        label = filename.replace('.csv', '') if show_legend else None
         ax1.loglog(df['frequency'], df['Z'], '-', color=color, linewidth=2, 
                    label=label, marker='o', markersize=3, alpha=0.7)
         ax2.semilogx(df['frequency'], df['theta'], '-', color=color, linewidth=2,
@@ -511,13 +515,15 @@ def plot_measurement_comparison(data_dir, file_indices=None, figsize=(14, 5)):
     ax1.set_ylabel('|Z| (Ω)', fontsize=12)
     ax1.set_title('Impedance Magnitude Comparison', fontsize=13, fontweight='bold')
     ax1.grid(True, alpha=0.3, which='both')
-    ax1.legend(fontsize=10, loc='best')
+    if show_legend:
+        ax1.legend(fontsize=10, loc='best')
     
     ax2.set_xlabel('Frequency (Hz)', fontsize=12)
     ax2.set_ylabel('Phase θ (°)', fontsize=12)
     ax2.set_title('Phase Comparison', fontsize=13, fontweight='bold')
     ax2.grid(True, alpha=0.3)
-    ax2.legend(fontsize=10, loc='best')
+    if show_legend:
+        ax2.legend(fontsize=10, loc='best')
     
     plt.tight_layout()
     plt.show()
