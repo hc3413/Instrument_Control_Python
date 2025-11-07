@@ -270,6 +270,28 @@ class Janis(TemperatureStage):
         self._mhp = setpoint
         self.resource.write(f"MHP {self._mhp}")
 
+    def get_controller_status(self):
+        """
+        Get diagnostic information from the Janis controller.
+        Returns dict with mode, setpoint, current temp, and heater power.
+        """
+        mode = self.resource.query("MODE?").strip()
+        setpoint = self.resource.query("SET?").strip()
+        temp = self.temperature
+        # Try to get heater power percentage if available
+        try:
+            heater = self.resource.query("HTP?").strip()  # Heater power query
+        except:
+            heater = "N/A"
+        
+        return {
+            'mode': mode,
+            'setpoint': setpoint,
+            'current_temp': temp,
+            'heater_power': heater,
+            'max_heater_power': self._mhp
+        }
+
     @property
     def temperature_stable(self):
         """
@@ -290,5 +312,7 @@ class Janis(TemperatureStage):
         try:
             self._temperature_setpoint = float(setpoint)
             self.resource.write(f"SET {self._temperature_setpoint}")
+            # Ensure heater control is enabled (MODE 2 = temperature control)
+            self.resource.write('MODE 2')
         except:
             print("invalid temperature setpoint")
