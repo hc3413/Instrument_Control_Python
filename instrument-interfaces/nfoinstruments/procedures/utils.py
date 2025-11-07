@@ -32,10 +32,31 @@ def set_temperature_and_wait(temp_controller, target_temp, extra_settle_time=30,
         print("Waiting for temperature stability...")
     
     start_time = time.time()
+    last_check_time = start_time
+    warned_no_power = False
+    
     while not temp_controller.temperature_stable:
+        current = temp_controller.temperature
+        elapsed = (time.time() - start_time) / 60
+        
+        # Check if heater power is stuck at 0 after 2 minutes (for Janis only)
+        if hasattr(temp_controller, 'get_controller_status') and not warned_no_power:
+            if elapsed > 2.0:  # After 2 minutes
+                delta_temp = abs(current - target_temp)
+                if delta_temp > 0.3:  # Still far from target
+                    try:
+                        status = temp_controller.get_controller_status()
+                        heater_str = str(status.get('heater_power', 'N/A'))
+                        if heater_str != 'N/A' and '0.0' in heater_str:
+                            print(f"\n⚠️  WARNING: Heater power is 0% but {delta_temp:.1f}K from target!")
+                            print(f"    Controller mode: {status.get('mode', 'unknown')}")
+                            print(f"    Attempting to reactivate temperature control...")
+                            temp_controller.temperature_setpoint = target_temp  # Re-send with MODE 2
+                            warned_no_power = True
+                    except:
+                        pass  # Ignore errors in diagnostic check
+        
         if verbose:
-            current = temp_controller.temperature
-            elapsed = (time.time() - start_time) / 60
             print(f"  Current: {current:.2f} K | Target: {target_temp} K | Elapsed: {elapsed:.1f} min", end='\r')
         time.sleep(10)
     

@@ -296,12 +296,23 @@ class Janis(TemperatureStage):
     def temperature_stable(self):
         """
         This function determines whether the current temperature has stabilized at the setpoint.
+        Checks both that temperature is near setpoint AND not changing significantly.
         """
-        temps = [self._temperature_setpoint]
+        if self._temperature_setpoint is None:
+            return False
+        
+        # First check: Are we close to the setpoint? (within 0.5K)
+        current_temp = self.temperature
+        if abs(current_temp - self._temperature_setpoint) > 0.5:
+            return False
+        
+        # Second check: Is temperature stable? (variations < 0.1K over 3 measurements)
+        temps = [current_temp]
         for _ in range(3):
             temps.append(self.temperature)
             sleep(self._temp_stable_time)
-        return max(temps)-min(temps) < 0.1
+        
+        return max(temps) - min(temps) < 0.1
 
     @property
     def temperature_setpoint(self):
