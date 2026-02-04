@@ -29,9 +29,11 @@ from .utils import (
     set_temperature_and_wait, 
     set_bias_and_wait,
     sweep_frequency_lcr,
+    single_frequency_time_scan,
     load_measurement_files,
     plot_all_measurements,
-    plot_measurement_comparison
+    plot_measurement_comparison,
+    plot_time_scan_comparison
 )
 
 __all__ = [
@@ -43,7 +45,9 @@ __all__ = [
     'set_temperature_and_wait',
     'set_bias_and_wait',
     'sweep_frequency_lcr',
+    'single_frequency_time_scan',
     'load_measurement_files',
     'plot_all_measurements',
     'plot_measurement_comparison',
+    'plot_time_scan_comparison',
 ]
