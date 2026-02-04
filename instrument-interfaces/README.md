@@ -96,10 +96,10 @@ nfoinstruments/
 Always use Enums instead of strings for instrument parameters:
 
 ```python
-# ❌ Don't do this
+# Don't do this
 lcr.measurement_time = 'MEDIUM'
 
-# ✅ Do this instead
+# Do this instead
 lcr.measurement_time = E4890A.MeasurementTime.MEDIUM
 ```
 

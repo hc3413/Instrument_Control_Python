@@ -13,7 +13,6 @@ from .impedance_analyzer import *
 class DummyProcedure(Procedure):
 
     
-    
 
     # a list defining the order and appearance of columns in our data file
     DATA_COLUMNS = ['Number', 'Time_since_init', 'Time_since_start']

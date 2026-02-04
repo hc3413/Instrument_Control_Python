@@ -39,4 +39,4 @@ with open(filename, "w") as f:
     f.write("# time,bias,frequency,NA,Z,theta\n")
     sweep_frequency_lcr(janis, lcr, frequency_points, f, verbose=True)
 
-print("\n✓ Measurement complete!")
+print("\nMeasurement complete!")

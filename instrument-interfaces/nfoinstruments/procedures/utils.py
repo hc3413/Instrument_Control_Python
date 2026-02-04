@@ -48,7 +48,7 @@ def set_temperature_and_wait(temp_controller, target_temp, extra_settle_time=30,
                         status = temp_controller.get_controller_status()
                         heater_str = str(status.get('heater_power', 'N/A'))
                         if heater_str != 'N/A' and '0.0' in heater_str:
-                            print(f"\n⚠️  WARNING: Heater power is 0% but {delta_temp:.1f}K from target!")
+                            print(f"\nWARNING: Heater power is 0% but {delta_temp:.1f}K from target!")
                             print(f"    Controller mode: {status.get('mode', 'unknown')}")
                             print(f"    Attempting to reactivate temperature control...")
                             temp_controller.temperature_setpoint = target_temp  # Re-send with MODE 2
@@ -63,7 +63,7 @@ def set_temperature_and_wait(temp_controller, target_temp, extra_settle_time=30,
     actual_temp = temp_controller.temperature
     
     if verbose:
-        print(f"\n✓ Temperature stable at {actual_temp:.2f} K")
+        print(f"\nTemperature stable at {actual_temp:.2f} K")
         if extra_settle_time > 0:
             print(f"Additional {extra_settle_time}s settling time...")
     
@@ -83,7 +83,8 @@ def sweep_frequency_lcr(temp_controller, lcr, frequency_points, output_file, ver
     Header: # time,bias,frequency,NA,Z,theta
     
     Args:
-        temp_controller: Temperature controller (Janis or PPMS)
+        temp_controller: Temperature controller (Janis or PPMS), or None.
+                         If None, temperature is recorded as 295.0 K (Room Temp).
         lcr: LCR meter with frequency, bias, and measurement properties
         frequency_points: Array of frequencies to measure (Hz)
         output_file: Open file handle for writing data
@@ -96,7 +97,12 @@ def sweep_frequency_lcr(temp_controller, lcr, frequency_points, output_file, ver
         time.sleep(0.05)  # Small delay for settling
         
         result = lcr.measurement  # Returns [Z, theta] for ZTD mode
-        curr_temp = temp_controller.temperature
+        
+        # Determine temperature to record
+        if temp_controller is not None:
+            curr_temp = temp_controller.temperature
+        else:
+            curr_temp = 295.0  # Default to Room Temp if no controller provided
         
         # Format: time,bias,frequency,NA,Z,theta (no trailing comma)
         data = f"{time.time()},{lcr.bias},{freq},-1,{result[0]},{result[1]}\n"
@@ -107,7 +113,50 @@ def sweep_frequency_lcr(temp_controller, lcr, frequency_points, output_file, ver
             print(f"  Progress: {i}/{total_points} points")
     
     if verbose:
-        print(f"  ✓ Frequency sweep complete ({total_points} points)")
+        print(f"    Frequency sweep complete ({total_points} points)")
+
+
+def single_frequency_time_scan(temp_controller, lcr, frequency, duration, output_file, verbose=False):
+    """
+    Measure at a single frequency for a specified duration to track drift.
+    
+    The AC signal remains applied continuously throughout the measurement.
+    
+    Output format: time,bias,frequency,NA,Z,theta (compatible with legacy format)
+    
+    Args:
+        temp_controller: Temperature controller (Janis or PPMS), or None.
+        lcr: LCR meter instance
+        frequency (float): Frequency to hold (Hz)
+        duration (float): Total time to measure (seconds)
+        output_file: Open file handle for writing data
+        verbose (bool): Print progress updates
+    """
+    lcr.frequency = frequency
+    time.sleep(0.05)
+    
+    start_time = time.time()
+    next_print = start_time
+    count = 0
+    
+    while (time.time() - start_time) < duration:
+        result = lcr.measurement  # Returns [Z, theta]
+        
+        # Format: time,bias,frequency,NA,Z,theta
+        data = f"{time.time()},{lcr.bias},{frequency},-1,{result[0]},{result[1]}\n"
+        output_file.write(data)
+        output_file.flush()
+        count += 1
+        
+        # Print status every 5 seconds
+        if verbose and time.time() > next_print:
+            elapsed = time.time() - start_time
+            print(f"  Time: {elapsed:.1f}/{duration:.1f}s | Points: {count} | Z: {result[0]:.2e} Ohm", end='\r')
+            next_print = time.time() + 5.0
+            
+    if verbose:
+        print(f"\n    Time scan complete: {count} points in {duration:.1f}s")
+
 
 
 def set_bias_and_wait(lcr, bias_voltage, settle_time=0.5):
@@ -359,6 +408,10 @@ def settle_at_start_temp(measurement_manager, start_temp):
         time.sleep(5)
 
 
+
+
+
+
 # =============================================================================
 # Data Loading and Plotting Utilities
 # =============================================================================
@@ -475,7 +528,7 @@ def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10), show_l
     plt.tight_layout()
     plt.show()
     
-    print(f"\n✓ Plotted {len(datasets)} files from {data_dir}")
+    print(f"\nPlotted {len(datasets)} files from {data_dir}")
     return fig, (ax1, ax2, ax3, ax4), datasets
 
 
@@ -527,3 +580,71 @@ def plot_measurement_comparison(data_dir, file_indices=None, figsize=(14, 5), sh
     
     plt.tight_layout()
     plt.show()
+
+
+def plot_time_scan_comparison(data_dir, file_indices=None, figsize=(14, 5), show_legend=True):
+    """
+    Plot time-domain measurement files (Z and theta vs Time).
+    
+    Compatible with output from single_frequency_time_scan().
+    X-axis is normalized to time elapsed since start of measurement (t - t0).
+    
+    Args:
+        data_dir (str): Path to data directory
+        file_indices (list): List of file indices to plot (None = all files)
+        figsize (tuple): Figure size
+        show_legend (bool): Whether to display legend (default: True)
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    
+    datasets = load_measurement_files(data_dir)
+    
+    if not datasets:
+        print(f"No data files found in {data_dir}")
+        return
+    
+    # Filter datasets that actually look like time scans (i.e. single frequency or labeled as such)
+    # For now, we just assume the user is pointing to the right directory.
+    
+    if file_indices is not None:
+        datasets = [datasets[i] for i in file_indices if i < len(datasets)]
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+    colors = plt.cm.tab10(np.linspace(0, 0.9, len(datasets)))
+    
+    for (filename, df), color in zip(datasets, colors):
+        label = filename.replace('.csv', '') if show_legend else None
+        
+        # Calculate elapsed time in seconds relative to start of file
+        # 'time' column is typically epoch timestamp
+        start_time = df['time'].iloc[0]
+        elapsed_time = df['time'] - start_time
+        
+        # Plot Magnitude Drift
+        ax1.plot(elapsed_time, df['Z'], '-', color=color, linewidth=1.5, 
+                   label=label, alpha=0.8)
+        
+        # Plot Phase Drift
+        ax2.plot(elapsed_time, df['theta'], '-', color=color, linewidth=1.5,
+                    label=label, alpha=0.8)
+    
+    # Configure Magnitude Plot
+    ax1.set_xlabel('Elapsed Time (s)', fontsize=12)
+    ax1.set_ylabel('|Z| (Ω)', fontsize=12)
+    ax1.set_title('Impedance Drift vs Time', fontsize=13, fontweight='bold')
+    ax1.grid(True, alpha=0.3, which='both')
+    if show_legend:
+        ax1.legend(fontsize=8, loc='best', framealpha=0.9)
+    
+    # Configure Phase Plot
+    ax2.set_xlabel('Elapsed Time (s)', fontsize=12)
+    ax2.set_ylabel('Phase θ (°)', fontsize=12)
+    ax2.set_title('Phase Drift vs Time', fontsize=13, fontweight='bold')
+    ax2.grid(True, alpha=0.3)
+    if show_legend:
+        ax2.legend(fontsize=8, loc='best', framealpha=0.9)
+    
+    plt.tight_layout()
+    plt.show()
+

@@ -78,7 +78,7 @@ with open(filename, "w") as f:
     f.write("# time,bias,frequency,NA,Z,theta\n")
     sweep_frequency_lcr(janis, lcr, frequencies, f, verbose=True)
 
-print(f"✓ Data saved to {filename}")
+print(f"Data saved to {filename}")
 ```
 
 ### Example 2: Single Temperature, Single Frequency
@@ -125,9 +125,9 @@ for i, target_temp in enumerate(temperature_points, start=1):
         f.write("# time,bias,frequency,NA,Z,theta\n")
         sweep_frequency_lcr(janis, lcr, frequencies, f, verbose=True)
     
-    print(f"✓ Saved: {filename}")
+    print(f"Saved: {filename}")
 
-print("\n✓ Temperature sweep complete!")
+print("\nTemperature sweep complete!")
 ```
 
 ### Example 4: Bias Sweep at Each Temperature
@@ -161,10 +161,10 @@ for target_temp in temperature_points:
             f.write("# time,bias,frequency,NA,Z,theta\n")
             sweep_frequency_lcr(janis, lcr, frequencies, f, verbose=True)
         
-        print(f"  ✓ Saved: {filename}")
+        print(f"  Saved: {filename}")
         run_count += 1
 
-print("\n✓ All measurements complete!")
+print("\nAll measurements complete!")
 ```
 
 ---
@@ -214,7 +214,7 @@ def wait_for_extra_stable_temperature(temp_controller, target_temp, tolerance=0.
         time.sleep(10)
     
     final_temp = temp_controller.temperature
-    print(f"✓ Temperature stable at {final_temp:.3f} K")
+    print(f"Temperature stable at {final_temp:.3f} K")
     return final_temp
 
 # Use it
@@ -344,12 +344,12 @@ try:
         sweep_frequency_lcr(janis, lcr, frequencies, f, verbose=True)
         
 except KeyboardInterrupt:
-    print("\n⚠ Measurement interrupted by user")
+    print("\nMeasurement interrupted by user")
     # Safe shutdown
     lcr.bias = 0.0
     
 except Exception as e:
-    print(f"❌ Error: {e}")
+    print(f"Error: {e}")
     # Log error, safe shutdown
     lcr.bias = 0.0
     raise
@@ -371,7 +371,7 @@ Always use `pathlib` or forward slashes:
 ```python
 from pathlib import Path
 
-# ✓ Good (cross-platform)
+# Good (cross-platform)
 data_dir = Path("data")
 filename = data_dir / f"run{i:03d}.csv"
 

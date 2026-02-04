@@ -118,7 +118,7 @@ Each instrument has a dedicated driver class with well-defined properties:
 - `temperature_stable` - Boolean indicating stability
 - `max_heater_power` - Maximum heater power (%)
 
-### 🔧 Composable Measurement Functions
+### Composable Measurement Functions
 
 Simple utility functions that you can combine for complex measurements:
 
@@ -133,7 +133,7 @@ sweep_frequency_lcr(janis, lcr, frequencies, output_file)
 set_bias_and_wait(lcr, 1.0, settle_time=0.5)
 ```
 
-### 📊 Stacked Measurements
+### Stacked Measurements
 
 Create complex measurement sequences by stacking simple operations:
 
@@ -177,12 +177,12 @@ git pull origin main
 ## Supported Instruments
 
 ### LCR Meters
-- ✅ Agilent E4980A (20 Hz - 2 MHz)
-- ✅ HP/Agilent 4291A RF Impedance Analyzer (1 MHz - 1.8 GHz)
+- Agilent E4980A (20 Hz - 2 MHz)
+- HP/Agilent 4291A RF Impedance Analyzer (1 MHz - 1.8 GHz)
 
 ### Temperature Controllers
-- ✅ Janis Probe Station
-- ✅ PPMS (Physical Property Measurement System)
+- Janis Probe Station
+- PPMS (Physical Property Measurement System)
 
 ## Contributing
 

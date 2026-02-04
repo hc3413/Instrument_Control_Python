@@ -57,10 +57,10 @@ for target_temp in temperature_points:
             f.write("# time,bias,frequency,NA,Z,theta\n")
             sweep_frequency_lcr(janis, lcr, frequency_points, f, verbose=True)
         
-        print(f"    ✓ Run {run_count} saved")
+        print(f"    Run {run_count} saved")
         run_count += 1
 
 print("\n" + "="*60)
-print("✓ ALL MEASUREMENTS COMPLETE!")
+print("ALL MEASUREMENTS COMPLETE!")
 print(f"Total files saved: {run_count - 1}")
 print("="*60)

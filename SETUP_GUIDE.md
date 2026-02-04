@@ -24,7 +24,7 @@ You should see `(venvmac)` in your terminal prompt.
 
 ```bash
 # Test the package import
-python -c "from nfoinstruments import E4890A, Janis; print('✓ Installation successful!')"
+python -c "from nfoinstruments import E4890A, Janis; print('Installation successful!')"
 ```
 
 ### 4. Run Jupyter Notebook
@@ -116,15 +116,15 @@ git pull origin main
 ### When to Reinstall
 
 **Yes, reinstall needed:**
-- ❌ First time setup on a new machine
-- ❌ Adding new dependencies to `setup.py`
-- ❌ After someone else changes `setup.py` and you pull
+- First time setup on a new machine
+- Adding new dependencies to `setup.py`
+- After someone else changes `setup.py` and you pull
 
 **No reinstall needed:**
-- ✅ Editing existing `.py` files in `nfoinstruments/`
-- ✅ Adding new functions to existing modules
-- ✅ Bug fixes in drivers
-- ✅ Just restart Jupyter kernel!
+- Editing existing `.py` files in `nfoinstruments/`
+- Adding new functions to existing modules
+- Bug fixes in drivers
+- Just restart Jupyter kernel!
 
 ### Reinstallation Command
 
