@@ -126,7 +126,11 @@ class E4890A(LCR):
         self.resource.write(f"FREQ {self._frequency}")
         self.resource.write(f"VOLT {self._signal_amplitude}")
         self.resource.write(f"FUNC:IMP:TYPE {self._measurement_type.value}")
+        
+        # Force Internal Trigger to prevent hanging if left in Manual/Bus mode
+        self.resource.write("TRIG:SOUR INT")
         self.resource.write("INIT:CONT ON")
+        
         self.resource.write("AMPL:ALC ON")
         self.resource.write("FORMAT ASCII")
 
