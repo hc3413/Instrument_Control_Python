@@ -75,7 +75,7 @@ class E4890A(LCR):
     DEFAULT_BIAS = 0
     DEFAULT_FREQUENCY = 100
     DEFAULT_SIGNAL_AMPLITUDE = 1
-    DEFAULT_MEASUREMENT_TIMEOUT = 10  # Increased from 3 to 10 seconds
+    DEFAULT_MEASUREMENT_TIMEOUT = 20  # Increased from 10 to 20 seconds
     DEFAULT_ALC_ENABLED = True
     DEFAULT_MEASURMENT_TYPE = MeasurementType.RX
     DEFAULT_SIGNAL_TYPE = SignalType.VOLTAGE
@@ -107,9 +107,18 @@ class E4890A(LCR):
 
     def _initialize(self):
         self.resource.clear()
-        #self.resource.write("SYSTEM:PRESET")
+        self.resource.write("*CLS")
+        
+        # Verify connection and clear any pending errors
+        try:
+            idn = self.resource.query("*IDN?")
+            print(f"LCR Connected: {idn.strip()}")
+        except Exception as e:
+            print(f"Warning: Failed to query IDN during initialization: {e}")
 
         self.resource.write('*RST')
+        sleep(1.0) # Wait for reset to complete
+        
         self.resource.write(f"APER {self._measurement_time.value}, {self._averages}")
         self.resource.write("BIAS:STAT OFF")
         self.resource.write(f"BIAS:VOLT {self._bias}")
