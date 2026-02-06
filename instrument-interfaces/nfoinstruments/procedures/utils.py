@@ -450,7 +450,11 @@ def load_measurement_files(data_dir, pattern="run*.csv"):
     return datasets
 
 
-def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10), show_legend=True):
+def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10), 
+                          show_legend=True, 
+                          y_lim_left = None, x_lim_left = None, 
+                          y_lim_right = None, x_lim_right = None,
+                          ):
     """
     Plot all measurement files on the same figure with different colors.
     
@@ -471,6 +475,7 @@ def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10), show_l
     """
     import matplotlib.pyplot as plt
     import numpy as np
+
     
     datasets = load_measurement_files(data_dir, pattern)
     
@@ -489,10 +494,15 @@ def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10), show_l
         temp = df['bias'].iloc[0] if 'bias' in df.columns else 0
         label = filename.replace('.csv', '') if show_legend else None
         
+
+        freq = df['frequency']
+        Z_mag = df['Z']
+        theta = df['theta']
+
         # Top row: All files overlaid
-        ax1.loglog(df['frequency'], df['Z'], '-', color=color, linewidth=1.5, 
+        ax1.loglog(freq, Z_mag, '-', color=color, linewidth=1.5, 
                    label=label, alpha=0.7)
-        ax2.semilogx(df['frequency'], df['theta'], '-', color=color, linewidth=1.5,
+        ax2.semilogx(freq, theta , '-', color=color, linewidth=1.5,
                     label=label, alpha=0.7)
     
     # Configure top plots (all files)
@@ -524,6 +534,19 @@ def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10), show_l
     ax4.set_ylabel('Phase θ (°)', fontsize=11)
     ax4.set_title(f'Latest: {latest_file}', fontsize=12, fontweight='bold')
     ax4.grid(True, alpha=0.3)
+
+
+    #Set axis limits
+    if x_lim_left:
+        ax1.x_lim = x_lim_left
+    if y_lim_left:
+        ax1.y_lim = y_lim_left
+    
+    if x_lim_right:
+        ax2.x_lim = x_lim_right
+    if y_lim_right:
+        ax2.y_lim = y_lim_right
+
     
     plt.tight_layout()
     plt.show()
@@ -532,7 +555,8 @@ def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10), show_l
     return fig, (ax1, ax2, ax3, ax4), datasets
 
 
-def plot_measurement_comparison(data_dir, file_indices=None, figsize=(14, 5), show_legend=True):
+def plot_measurement_comparison(data_dir, file_indices=None, figsize=(14, 5), 
+                                show_legend=True):
     """
     Plot specific measurement files for comparison.
     
@@ -559,6 +583,7 @@ def plot_measurement_comparison(data_dir, file_indices=None, figsize=(14, 5), sh
     
     for (filename, df), color in zip(datasets, colors):
         label = filename.replace('.csv', '') if show_legend else None
+        
         ax1.loglog(df['frequency'], df['Z'], '-', color=color, linewidth=2, 
                    label=label, marker='o', markersize=3, alpha=0.7)
         ax2.semilogx(df['frequency'], df['theta'], '-', color=color, linewidth=2,
@@ -582,7 +607,9 @@ def plot_measurement_comparison(data_dir, file_indices=None, figsize=(14, 5), sh
     plt.show()
 
 
-def plot_time_scan_comparison(data_dir, file_indices=None, figsize=(14, 5), show_legend=True):
+def plot_time_scan_comparison(data_dir, file_indices=None, figsize=(14, 5), 
+                              normalise = False,
+                              show_legend=True):
     """
     Plot time-domain measurement files (Z and theta vs Time).
     
@@ -621,12 +648,19 @@ def plot_time_scan_comparison(data_dir, file_indices=None, figsize=(14, 5), show
         start_time = df['time'].iloc[0]
         elapsed_time = df['time'] - start_time
         
+        if normalise:
+            Z_mag = df['Z']/df['Z'].iloc[0]
+            theta = df['theta']/df['theta'].iloc[0]
+        else:
+            Z_mag = df['Z']
+            theta = df['theta']
+
         # Plot Magnitude Drift
-        ax1.plot(elapsed_time, df['Z'], '-', color=color, linewidth=1.5, 
+        ax1.plot(elapsed_time, Z_mag , '-', color=color, linewidth=1.5, 
                    label=label, alpha=0.8)
         
         # Plot Phase Drift
-        ax2.plot(elapsed_time, df['theta'], '-', color=color, linewidth=1.5,
+        ax2.plot(elapsed_time, theta , '-', color=color, linewidth=1.5,
                     label=label, alpha=0.8)
     
     # Configure Magnitude Plot
