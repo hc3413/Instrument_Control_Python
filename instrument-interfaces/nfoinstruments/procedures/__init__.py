@@ -30,10 +30,14 @@ from .utils import (
     set_bias_and_wait,
     sweep_frequency_lcr,
     single_frequency_time_scan,
+    build_cv_bias_path,
+    sweep_cv_lcr,
     load_measurement_files,
+    load_cv_measurement_files,
     plot_all_measurements,
     plot_measurement_comparison,
-    plot_time_scan_comparison
+    plot_time_scan_comparison,
+    plot_cv_comparison,
 )
 
 __all__ = [
@@ -46,8 +50,12 @@ __all__ = [
     'set_bias_and_wait',
     'sweep_frequency_lcr',
     'single_frequency_time_scan',
+    'build_cv_bias_path',
+    'sweep_cv_lcr',
     'load_measurement_files',
+    'load_cv_measurement_files',
     'plot_all_measurements',
     'plot_measurement_comparison',
     'plot_time_scan_comparison',
+    'plot_cv_comparison',
 ]

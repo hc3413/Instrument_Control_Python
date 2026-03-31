@@ -158,6 +158,77 @@ def single_frequency_time_scan(temp_controller, lcr, frequency, duration, output
         print(f"\n    Time scan complete: {count} points in {duration:.1f}s")
 
 
+def build_cv_bias_path(v_min, v_max, v_step):
+    """
+    Build a CV-style bias trajectory: 0 -> +v_max -> v_min -> 0.
+
+    Args:
+        v_min (float): Minimum bias in Volts (must be <= 0)
+        v_max (float): Maximum bias in Volts (must be >= 0)
+        v_step (float): Absolute step size in Volts (must be > 0)
+
+    Returns:
+        list[float]: Ordered bias path including endpoints
+    """
+    import numpy as np
+
+    if v_step <= 0:
+        raise ValueError("v_step must be > 0")
+    if v_min > 0:
+        raise ValueError("v_min must be <= 0 for 0 -> +max -> min -> 0 path")
+    if v_max < 0:
+        raise ValueError("v_max must be >= 0 for 0 -> +max -> min -> 0 path")
+
+    step = abs(v_step)
+
+    # Segment 1: 0 -> +v_max
+    seg_up = np.arange(0.0, v_max + (step * 0.5), step)
+
+    # Segment 2: +v_max -> v_min (skip repeated v_max)
+    seg_down = np.arange(v_max - step, v_min - (step * 0.5), -step)
+
+    # Segment 3: v_min -> 0 (skip repeated v_min)
+    seg_return = np.arange(v_min + step, 0.0 + (step * 0.5), step)
+
+    path = np.concatenate([seg_up, seg_down, seg_return]).tolist()
+    return [float(v) for v in path]
+
+
+def sweep_cv_lcr(temp_controller, lcr, frequency, bias_points, output_file,
+                 verbose=False, settle_time=0.1):
+    """
+    Perform a CV sweep at a single fixed frequency and write Cp/Gp data.
+
+    Output format: time,bias,frequency,NA,Cp,Gp
+
+    Args:
+        temp_controller: Temperature controller (unused here, kept for API consistency)
+        lcr: LCR meter with frequency, bias, and measurement properties
+        frequency (float): Fixed measurement frequency in Hz
+        bias_points (array-like): Ordered DC bias points in Volts
+        output_file: Open file handle for writing data
+        verbose (bool): Print progress updates
+        settle_time (float): Wait time after setting each bias (seconds)
+    """
+    lcr.frequency = frequency
+    total_points = len(bias_points)
+
+    for i, bias in enumerate(bias_points, start=1):
+        lcr.bias = float(bias)
+        time.sleep(settle_time)
+
+        result = lcr.measurement  # In CPG mode: [Cp, Gp]
+        data = f"{time.time()},{lcr.bias},{frequency},-1,{result[0]},{result[1]}\n"
+        output_file.write(data)
+        output_file.flush()
+
+        if verbose and (i % 20 == 0 or i == total_points):
+            print(f"  Progress: {i}/{total_points} bias points", end='\r')
+
+    if verbose:
+        print(f"\n    CV sweep complete ({total_points} points @ {frequency:.3g} Hz)")
+
+
 
 def set_bias_and_wait(lcr, bias_voltage, settle_time=0.5):
     """
@@ -450,6 +521,43 @@ def load_measurement_files(data_dir, pattern="run*.csv"):
     return datasets
 
 
+def load_cv_measurement_files(data_dir, pattern="run*.csv"):
+    """
+    Load CV CSV files from a directory.
+
+    Expected columns (after comments): time,bias,frequency,NA,Cp,Gp
+
+    Args:
+        data_dir (str): Path to data directory
+        pattern (str): Glob pattern for files (default: "run*.csv")
+
+    Returns:
+        list: List of tuples (filename, dataframe)
+    """
+    import pandas as pd
+    from pathlib import Path
+
+    data_path = Path(data_dir)
+    files = sorted(data_path.glob(pattern))
+
+    datasets = []
+    for file in files:
+        try:
+            df = pd.read_csv(
+                file,
+                comment='#',
+                names=['time', 'bias', 'frequency', 'NA', 'Cp', 'Gp'],
+                skipinitialspace=True,
+            )
+            df = df.dropna(axis=1, how='all')
+            if not df.empty:
+                datasets.append((file.name, df))
+        except Exception as e:
+            print(f"Warning: Could not load {file.name}: {e}")
+
+    return datasets
+
+
 def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10), 
                           show_legend=True, 
                           y_lim_left = None, x_lim_left = None, 
@@ -486,7 +594,7 @@ def plot_all_measurements(data_dir, pattern="run*.csv", figsize=(14, 10),
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=figsize)
     
     # Color map for multiple files
-    colors = plt.cm.viridis(np.linspace(0, 0.9, len(datasets)))
+    colors = plt.get_cmap('viridis')(np.linspace(0, 0.9, len(datasets)))
     
     # Plot all files
     for (filename, df), color in zip(datasets, colors):
@@ -579,7 +687,7 @@ def plot_measurement_comparison(data_dir, file_indices=None, figsize=(14, 5),
         datasets = [datasets[i] for i in file_indices if i < len(datasets)]
     
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
-    colors = plt.cm.tab10(np.linspace(0, 0.9, len(datasets)))
+    colors = plt.get_cmap('tab10')(np.linspace(0, 0.9, len(datasets)))
     
     for (filename, df), color in zip(datasets, colors):
         label = filename.replace('.csv', '') if show_legend else None
@@ -638,7 +746,7 @@ def plot_time_scan_comparison(data_dir, file_indices=None, figsize=(14, 5),
         datasets = [datasets[i] for i in file_indices if i < len(datasets)]
     
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
-    colors = plt.cm.tab10(np.linspace(0, 0.9, len(datasets)))
+    colors = plt.get_cmap('tab10')(np.linspace(0, 0.9, len(datasets)))
     
     for (filename, df), color in zip(datasets, colors):
         label = filename.replace('.csv', '') if show_legend else None
@@ -679,6 +787,59 @@ def plot_time_scan_comparison(data_dir, file_indices=None, figsize=(14, 5),
     if show_legend:
         ax2.legend(fontsize=8, loc='best', framealpha=0.9)
     
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_cv_comparison(data_dir, pattern="run*.csv", file_indices=None,
+                       figsize=(14, 5), show_legend=True):
+    """
+    Plot CV files: Cp and Gp versus Vdc.
+
+    Args:
+        data_dir (str): Path to data directory
+        pattern (str): Glob pattern for files (default: "run*.csv")
+        file_indices (list): List of file indices to plot (None = all files)
+        figsize (tuple): Figure size
+        show_legend (bool): Whether to display legend (default: True)
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    datasets = load_cv_measurement_files(data_dir, pattern=pattern)
+
+    if not datasets:
+        print(f"No CV data files found in {data_dir}")
+        return
+
+    if file_indices is not None:
+        datasets = [datasets[i] for i in file_indices if i < len(datasets)]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
+    colors = plt.get_cmap('tab10')(np.linspace(0, 0.9, len(datasets)))
+
+    for (filename, df), color in zip(datasets, colors):
+        label = filename.replace('.csv', '') if show_legend else None
+
+        ax1.plot(df['bias'], df['Cp'], '-', color=color, linewidth=2,
+                 label=label, marker='o', markersize=3, alpha=0.8)
+        ax2.plot(df['bias'], df['Gp'], '-', color=color, linewidth=2,
+                 label=label, marker='o', markersize=3, alpha=0.8)
+
+    ax1.set_xlabel('Vdc (V)', fontsize=12)
+    ax1.set_ylabel('Cp (F)', fontsize=12)
+    ax1.set_title('Capacitance (Cp) vs Vdc', fontsize=13, fontweight='bold')
+    ax1.grid(True, alpha=0.3)
+    if show_legend:
+        ax1.legend(fontsize=8, loc='best', framealpha=0.9)
+
+    ax2.set_xlabel('Vdc (V)', fontsize=12)
+    ax2.set_ylabel('Gp (S)', fontsize=12)
+    ax2.set_title('Conductance (Gp) vs Vdc', fontsize=13, fontweight='bold')
+    ax2.grid(True, alpha=0.3)
+    if show_legend:
+        ax2.legend(fontsize=8, loc='best', framealpha=0.9)
+
     plt.tight_layout()
     plt.show()
 
