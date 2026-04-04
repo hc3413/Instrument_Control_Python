@@ -792,7 +792,7 @@ def plot_time_scan_comparison(data_dir, file_indices=None, figsize=(14, 5),
 
 
 def plot_cv_comparison(data_dir, pattern="run*.csv", file_indices=None,
-                       figsize=(14, 5), show_legend=True):
+                       figsize=(14, 5), show_legend=True , log_plot = False):
     """
     Plot CV files: Cp and Gp versus Vdc.
 
@@ -839,6 +839,10 @@ def plot_cv_comparison(data_dir, pattern="run*.csv", file_indices=None,
     ax2.grid(True, alpha=0.3)
     if show_legend:
         ax2.legend(fontsize=8, loc='best', framealpha=0.9)
+
+    if log_plot == True:
+        ax1.set_yscale('log')
+        ax2.set_yscale('log')
 
     plt.tight_layout()
     plt.show()
