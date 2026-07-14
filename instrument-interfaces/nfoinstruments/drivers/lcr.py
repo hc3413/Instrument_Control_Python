@@ -269,6 +269,7 @@ class E4890A(LCR):
 
     @alc_enabled.setter
     def alc_enabled(self, alc_enabled):
+        self._alc_enabled = alc_enabled
         if alc_enabled:
             self.resource.write("AMPL:ALC ON")
         else:

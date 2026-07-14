@@ -123,10 +123,10 @@ class PPMS(TemperatureStage):
         """
 
         self._update_status()
-        if self._status[3] in (5, 6, 7) or \
+        if self._status.temperature in (5, 6, 7) or \
             abs(self._temperature - self._temperature_setpoint) > 0.2: 
             return False
-        if self._status[3] in (1, 2):
+        if self._status.temperature in (1, 2):
             return True
         raise IOError("Error in PPMS temperature control.")
     
@@ -134,10 +134,10 @@ class PPMS(TemperatureStage):
     def field_stable(self):
         """This function determines whether the current magnetic field has stabilized at the setpoint."""
         self._update_status()
-        if self._status[2] in (2, 3, 5, 6, 7) or \
+        if self._status.field in (2, 3, 5, 6, 7) or \
             abs(self._field - self._field_setpoint) > 2: 
             return False
-        if self._status[2] in (1, 4):
+        if self._status.field in (1, 4):
             return True
         raise IOError("Error in PPMS field control.")
     
@@ -146,7 +146,7 @@ class PPMS(TemperatureStage):
         """This function returns the status of the sample chamber."""
 
         self._update_status()
-        if self._status[1] in (1, 2, 4, 5, 8, 9): return self._status[1]
+        if self._status.chamber in (1, 2, 4, 5, 8, 9): return self._status.chamber
         raise IOError("Error in sample chamber status.")
 
     @chamber.setter
@@ -177,7 +177,7 @@ class PPMS(TemperatureStage):
     def sample_position(self):
         """This function returns the status of the sample chamber."""
         self._update_status()
-        if self._status[0] in (1, 5, 8, 9): return self._status[0]
+        if self._status.position in (1, 5, 8, 9): return self._status.position
         raise IOError("Error in sample position status.")
 
     @property
@@ -325,5 +325,6 @@ class Janis(TemperatureStage):
             self.resource.write(f"SET {self._temperature_setpoint}")
             # Ensure heater control is enabled (MODE 2 = temperature control)
             self.resource.write('MODE 2')
-        except:
-            print("invalid temperature setpoint")
+        except Exception as e:
+            print(f"invalid temperature setpoint: {e}")
+            raise

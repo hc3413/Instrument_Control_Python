@@ -38,7 +38,7 @@ class MeasurementSetup:
                 self.devices[addr] = devcls(addr, self._resman)
             except Exception as e:
                 print(f"Could not connect to device {devcls} at address {addr}")
-                print(e)
+                raise InstrumentError(f"Could not connect to device {devcls} at address {addr}: {e}") from e
 
 class InstrumentError(Exception):
     def __init__(self, message):

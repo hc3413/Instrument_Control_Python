@@ -79,8 +79,8 @@ def sweep_frequency_lcr(temp_controller, lcr, frequency_points, output_file, ver
     This function works with any LCR meter that has `frequency`, `bias`, and `measurement` 
     attributes. The output format is compatible with legacy Agilent data import classes.
     
-    Output format: time,bias,frequency,NA,Z,theta (6 columns with trailing comma)
-    Header: # time,bias,frequency,NA,Z,theta
+    Output format: time,bias,frequency,NA,Z,theta,temp
+    Header: # time,bias,frequency,NA,Z,theta,temp
     
     Args:
         temp_controller: Temperature controller (Janis or PPMS), or None.
@@ -104,8 +104,8 @@ def sweep_frequency_lcr(temp_controller, lcr, frequency_points, output_file, ver
         else:
             curr_temp = 295.0  # Default to Room Temp if no controller provided
         
-        # Format: time,bias,frequency,NA,Z,theta (no trailing comma)
-        data = f"{time.time()},{lcr.bias},{freq},-1,{result[0]},{result[1]}\n"
+        # Format: time,bias,frequency,NA,Z,theta,temp (no trailing comma)
+        data = f"{time.time()},{lcr.bias},{freq},-1,{result[0]},{result[1]},{curr_temp}\n"
         output_file.write(data)
         output_file.flush()
         
@@ -143,7 +143,8 @@ def single_frequency_time_scan(temp_controller, lcr, frequency, duration, output
         result = lcr.measurement  # Returns [Z, theta]
         
         # Format: time,bias,frequency,NA,Z,theta
-        data = f"{time.time()},{lcr.bias},{frequency},-1,{result[0]},{result[1]}\n"
+        curr_temp = temp_controller.temperature if temp_controller else 295.0
+        data = f"{time.time()},{lcr.bias},{frequency},-1,{result[0]},{result[1]},{curr_temp}\n"
         output_file.write(data)
         output_file.flush()
         count += 1
@@ -199,7 +200,7 @@ def sweep_cv_lcr(temp_controller, lcr, frequency, bias_points, output_file,
     """
     Perform a CV sweep at a single fixed frequency and write Cp/Gp data.
 
-    Output format: time,bias,frequency,NA,Cp,Gp
+    Output format: time,bias,frequency,NA,Cp,Gp,temp
 
     Args:
         temp_controller: Temperature controller (unused here, kept for API consistency)
@@ -218,7 +219,8 @@ def sweep_cv_lcr(temp_controller, lcr, frequency, bias_points, output_file,
         time.sleep(settle_time)
 
         result = lcr.measurement  # In CPG mode: [Cp, Gp]
-        data = f"{time.time()},{lcr.bias},{frequency},-1,{result[0]},{result[1]}\n"
+        curr_temp = temp_controller.temperature if temp_controller else 295.0
+        data = f"{time.time()},{lcr.bias},{frequency},-1,{result[0]},{result[1]},{curr_temp}\n"
         output_file.write(data)
         output_file.flush()
 
@@ -847,3 +849,257 @@ def plot_cv_comparison(data_dir, pattern="run*.csv", file_indices=None,
     plt.tight_layout()
     plt.show()
 
+
+
+# =============================================================================
+# Automated Measurement Sequences with Live Plotting
+# =============================================================================
+
+def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_points, bias_points, 
+                                              janis_ctrl, lcr_ctrl, freq_points, run_count_start=1):
+    """
+    Runs a temperature and bias sweep, with live plotting of Bode and Modulus plots.
+    
+    Args:
+        parent_dir (Path): Base directory for data.
+        sweep_name (str): Name of the current measurement sweep (creates a subfolder).
+        temp_points (list): Temperatures to measure at (K).
+        bias_points (list): DC Bias voltages to measure at (V).
+        janis_ctrl: Initialized Janis temperature controller.
+        lcr_ctrl: Initialized LCR meter.
+        freq_points (array): Frequencies for the sweep (Hz).
+        run_count_start (int): Starting run number for file naming.
+    """
+    import time
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from IPython.display import display, clear_output
+    
+    data_dir = parent_dir / sweep_name
+    data_dir.mkdir(parents=True, exist_ok=True)
+    
+    run_count = run_count_start
+    plot_data = [] 
+    cmap = plt.get_cmap("viridis")
+    linestyles = ["-", "--", ":", "-."]
+    
+    for target_temp in temp_points:
+        print(f"\n{'='*60}")
+        print(f"Temperature: {target_temp} K")
+        print('='*60)
+        
+        actual_temp = set_temperature_and_wait(janis_ctrl, target_temp, extra_settle_time=30, verbose=True)
+        
+        for b_idx, bias in enumerate(bias_points):
+            print(f"\n  Bias: {bias:+.2f} V")
+            set_bias_and_wait(lcr_ctrl, bias, settle_time=1.0)
+            
+            bias_str = f"neg{abs(bias):.2f}" if bias < 0 else f"pos{bias:.2f}"
+            filename = data_dir / f"run{run_count:03d}_temp_{actual_temp:.0f}_DC_{bias_str}V.csv"
+            
+            print(f"  Measuring -> {filename.name} ...")
+            
+            current_freq = []
+            current_Z = []
+            current_theta = []
+            
+            with open(filename, "w") as f:
+                f.write("# time,bias,frequency,NA,Z,theta,temp\n")
+                
+                for i, freq in enumerate(freq_points, start=1):
+                    lcr_ctrl.frequency = freq
+                    time.sleep(0.05)
+                    result = lcr_ctrl.measurement
+                    
+                    data_line = f"{time.time()},{lcr_ctrl.bias},{freq},-1,{result[0]},{result[1]},{actual_temp}\n"
+                    f.write(data_line)
+                    f.flush()
+                    
+                    current_freq.append(freq)
+                    current_Z.append(result[0])
+                    current_theta.append(result[1])
+                    
+                    if i % 50 == 0:
+                        print(f"    Progress: {i}/{len(freq_points)} points")
+                        
+            print(f"  ✓ Saved: {filename.name}")
+            run_count += 1
+            
+            plot_data.append({
+                "temp": actual_temp,
+                "bias": bias,
+                "freq": np.array(current_freq),
+                "Z": np.array(current_Z),
+                "theta": np.array(current_theta)
+            })
+            
+            clear_output(wait=True)
+            fig, axs = plt.subplots(2, 2, figsize=(15, 10))
+            fig.suptitle(f"Live Measurements - Latest Temp: {actual_temp:.0f}K, Bias: {bias:+.2f}V", fontsize=16)
+            
+            ax_mag, ax_phase = axs[0, 0], axs[0, 1]
+            ax_m_real, ax_m_imag = axs[1, 0], axs[1, 1]
+            
+            norm_temp = plt.Normalize(min(temp_points), max(temp_points)) if len(temp_points) > 1 else plt.Normalize(0, 1)
+            
+            for pd_dict in plot_data:
+                t_val, b_val = pd_dict["temp"], pd_dict["bias"]
+                f_arr, Z_arr, theta_arr = pd_dict["freq"], pd_dict["Z"], pd_dict["theta"]
+                
+                color = cmap(norm_temp(t_val)) if len(temp_points) > 1 else cmap(0.5)
+                ls_idx = bias_points.index(b_val) % len(linestyles) if b_val in bias_points else 0
+                ls = linestyles[ls_idx]
+                
+                label = f"{t_val:.0f}K, {b_val:+.2f}V"
+                
+                ax_mag.loglog(f_arr, Z_arr, color=color, linestyle=ls, label=label)
+                ax_phase.semilogx(f_arr, theta_arr, color=color, linestyle=ls, label=label)
+                
+                theta_rad = np.radians(theta_arr)
+                Z_complex = Z_arr * np.exp(1j * theta_rad)
+                omega = 2 * np.pi * f_arr
+                
+                M_complex = 1j * omega * Z_complex
+                ax_m_real.semilogx(f_arr, np.real(M_complex), color=color, linestyle=ls, label=label)
+                ax_m_imag.semilogx(f_arr, np.imag(M_complex), color=color, linestyle=ls, label=label)
+
+            ax_mag.set(xlabel="Frequency (Hz)", ylabel="|Z| (Ω)", title="Bode Plot: Magnitude")
+            ax_mag.grid(True, which="both", ls="--", alpha=0.5)
+            ax_phase.set(xlabel="Frequency (Hz)", ylabel="Phase $\theta$ (°)", title="Bode Plot: Phase")
+            ax_phase.grid(True, which="both", ls="--", alpha=0.5)
+            ax_m_real.set(xlabel="Frequency (Hz)", ylabel="M' / $C_0$", title="Modulus: Real Part ($M' \propto \omega Z''$)")
+            ax_m_real.grid(True, which="both", ls="--", alpha=0.5)
+            ax_m_imag.set(xlabel="Frequency (Hz)", ylabel="M'' / $C_0$", title="Modulus: Imaginary Part ($M'' \propto \omega Z'$)")
+            ax_m_imag.grid(True, which="both", ls="--", alpha=0.5)
+            
+            handles, labels = ax_mag.get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+            ax_mag.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
+            
+            plt.tight_layout()
+            display(fig)
+            plt.close(fig)
+            
+    print(f"\n{'='*60}")
+    print(f"✓ ALL MEASUREMENTS COMPLETE! Next run: {run_count}")
+    print('='*60)
+    return run_count
+
+def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points, 
+                                Vmin, Vmax, Vstep, Vrms, cycles, janis_ctrl, lcr_ctrl, run_count_start=1):
+    """
+    Runs a temperature and CV sweep, with live plotting of Cp and Gp vs DC Bias.
+    """
+    import time
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from IPython.display import display, clear_output
+    
+    data_dir = parent_dir / sweep_name
+    data_dir.mkdir(parents=True, exist_ok=True)
+    
+    Vdc_path = build_cv_bias_path(v_min=Vmin, v_max=Vmax, v_step=Vstep)
+    lcr_ctrl.measurement_type = lcr_ctrl.MeasurementType.CPG
+    
+    run_count = run_count_start
+    plot_data = []
+    cmap = plt.get_cmap("viridis")
+    linestyles = ["-", "--", ":", "-."]
+    
+    for target_temp in temp_points:
+        print(f"\n{'='*60}")
+        print(f"Temperature: {target_temp} K")
+        print('='*60)
+        
+        actual_temp = set_temperature_and_wait(janis_ctrl, target_temp, extra_settle_time=30, verbose=True)
+        
+        for c in range(1, cycles + 1):
+            print(f"\n  Cycle: {c}/{cycles}")
+            lcr_ctrl.signal_amplitude = Vrms
+            time.sleep(0.5)
+            
+            for freq_idx, freq in enumerate(freq_points):
+                filename = data_dir / (
+                    f"run{run_count:03d}_CV_temp_{actual_temp:.0f}_freq_{int(freq)}Hz_"
+                    f"Vrms_{Vrms:.3f}V_cycle_{c}.csv"
+                )
+                print(f"  Measuring CV @ {freq:.0f} Hz -> {filename.name}")
+                
+                lcr_ctrl.frequency = freq
+                current_bias = []
+                current_Cp = []
+                current_Gp = []
+                
+                with open(filename, "w") as f:
+                    f.write(f"# Type: CV_Scan\n")
+                    f.write(f"# Frequency: {freq} Hz\n")
+                    f.write(f"# Vrms: {Vrms:.6f} V\n")
+                    f.write(f"# time,bias,frequency,NA,Cp,Gp,temp\n")
+                    
+                    for i, bias in enumerate(Vdc_path, start=1):
+                        lcr_ctrl.bias = float(bias)
+                        time.sleep(0.1)
+                        result = lcr_ctrl.measurement # [Cp, Gp]
+                        
+                        data_line = f"{time.time()},{lcr_ctrl.bias},{freq},-1,{result[0]},{result[1]},{actual_temp}\n"
+                        f.write(data_line)
+                        f.flush()
+                        
+                        current_bias.append(lcr_ctrl.bias)
+                        current_Cp.append(result[0])
+                        current_Gp.append(result[1])
+                
+                print(f"  ✓ Saved: {filename.name}")
+                run_count += 1
+                
+                plot_data.append({
+                    "temp": actual_temp,
+                    "cycle": c,
+                    "freq": freq,
+                    "bias": np.array(current_bias),
+                    "Cp": np.array(current_Cp),
+                    "Gp": np.array(current_Gp)
+                })
+                
+                # --- LIVE PLOTTING ---
+                clear_output(wait=True)
+                fig, axs = plt.subplots(1, 2, figsize=(14, 5))
+                fig.suptitle(f"Live CV Measurements - Latest Temp: {actual_temp:.0f}K", fontsize=16)
+                
+                ax_cp, ax_gp = axs[0], axs[1]
+                norm_temp = plt.Normalize(min(temp_points), max(temp_points)) if len(temp_points) > 1 else plt.Normalize(0, 1)
+                
+                for pd_dict in plot_data:
+                    t_val, c_val, f_val = pd_dict["temp"], pd_dict["cycle"], pd_dict["freq"]
+                    b_arr, cp_arr, gp_arr = pd_dict["bias"], pd_dict["Cp"], pd_dict["Gp"]
+                    
+                    color = cmap(norm_temp(t_val)) if len(temp_points) > 1 else cmap(0.5)
+                    try:
+                        ls_idx = freq_points.index(f_val) % len(linestyles) if f_val in freq_points else 0
+                    except ValueError:
+                        ls_idx = 0
+                    ls = linestyles[ls_idx]
+                    
+                    label = f"{t_val:.0f}K, {f_val:.0f}Hz, Cyc {c_val}"
+                    
+                    ax_cp.plot(b_arr, cp_arr, color=color, linestyle=ls, label=label)
+                    ax_gp.plot(b_arr, gp_arr, color=color, linestyle=ls, label=label)
+                
+                ax_cp.set(xlabel="DC Bias (V)", ylabel="Capacitance Cp (F)", title="C-V Curve")
+                ax_cp.grid(True, ls="--", alpha=0.5)
+                
+                ax_gp.set(xlabel="DC Bias (V)", ylabel="Conductance Gp (S)", title="G-V Curve")
+                ax_gp.grid(True, ls="--", alpha=0.5)
+                
+                handles, labels = ax_cp.get_legend_handles_labels()
+                by_label = dict(zip(labels, handles))
+                ax_cp.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
+                
+                plt.tight_layout()
+                display(fig)
+                plt.close(fig)
+                
+    print(f"\n{'='*60}")
+    print(f"✓ CV MEASUREMENTS COMPLETE! Next run: {run_count}")
+    print('='*60)
+    return run_count

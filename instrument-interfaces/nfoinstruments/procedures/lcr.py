@@ -17,18 +17,14 @@ class ISProcedurePPMS(Procedure):
     # a list defining the order and appearance of columns in our data file
     DATA_COLUMNS = ['Time', 'Bias', 'Frequency', 'Temperature', 'R', 'X']
 
+    _bias_points = ListParameter('bias_points', units='V')
+    _temperature_points = ListParameter('temperature_points', units='K')
+    _start_temperature = FloatParameter('start_temperature', units='K')
+    _frequency_points = ListParameter('frequency_points', units='Hz')
+    _no_overshoot = BooleanParameter('approach_mode', default=True)
+    _temperature_rate = FloatParameter('temperature_rate', units='K/min')
+
     def __init__(self, setup, ppms_addr, lcr_addr):
-
-        self._bias_points = ListParameter('bias_points', units='V')
-        self._temperature_points = ListParameter('temperature_points', units='K')
-        self._start_temperature = FloatParameter('start_temperature', units='K')
-        self._frequency_points = ListParameter('frequency_points', units='Hz')
-        self._no_overshoot = BooleanParameter('approach_mode', default=True)
-        self._temperature_rate = FloatParameter('temperature_rate', units='K/min')
-        
-
-
-
         self._setup = setup
         self._setup.connect_to_devices({
                                         ppms_addr: PPMS,
@@ -145,7 +141,7 @@ class ISProcedurePPMS(Procedure):
             raise ValueError("temperature points must be an iterable (list, tuple) of temperatures")
         points = tuple(points) # In case a generator is passed
         if any(i<2 or i>400 for i in points):
-            raise ValueError("one or more of the temperature points exceeds the minimum or maximum bias") 
+            raise ValueError("one or more of the temperature points exceeds the minimum or maximum temperature") 
         self._temperature_points = points
 
     @property
@@ -246,11 +242,10 @@ class ISProcedureConstTemp(Procedure):
     # a list defining the order and appearance of columns in our data file
     DATA_COLUMNS = ['Time', 'Bias', 'Frequency', 'Temperature', 'R', 'X']
 
-    def __init__(self, setup, lcr_addr):
+    _bias_points = ListParameter('bias_points', units='V')
+    _frequency_points = ListParameter('frequency_points', units='Hz')
 
-        self._bias_points = ListParameter('bias_points', units='V')
-        self._frequency_points = ListParameter('frequency_points', units='Hz')
-        
+    def __init__(self, setup, lcr_addr):
         self._setup = setup
         self._setup.connect_to_devices({
                                         lcr_addr: E4890A
