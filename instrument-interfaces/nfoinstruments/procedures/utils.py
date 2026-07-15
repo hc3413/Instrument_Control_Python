@@ -856,7 +856,8 @@ def plot_cv_comparison(data_dir, pattern="run*.csv", file_indices=None,
 # =============================================================================
 
 def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_points, bias_points, 
-                                              janis_ctrl, lcr_ctrl, freq_points, run_count_start=1):
+                                              janis_ctrl, lcr_ctrl, freq_points, Vrms=0.05, 
+                                              filename_suffix='', run_count_start=1):
     """
     Runs a temperature and bias sweep, with live plotting of Bode and Modulus plots.
     
@@ -868,6 +869,8 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
         janis_ctrl: Initialized Janis temperature controller.
         lcr_ctrl: Initialized LCR meter.
         freq_points (array): Frequencies for the sweep (Hz).
+        Vrms (float): AC signal amplitude to use during measurement (V).
+        filename_suffix (str): Custom string to append to filename (e.g., '_pristine').
         run_count_start (int): Starting run number for file naming.
     """
     import time
@@ -883,6 +886,11 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
     cmap = plt.get_cmap("viridis")
     linestyles = ["-", "--", ":", "-."]
     
+    print(f"Activating LCR signal amplitude to {Vrms} V and trigger INT...")
+    lcr_ctrl.signal_amplitude = Vrms
+    lcr_ctrl.trigger_source = 'INT'
+    time.sleep(0.5)
+    
     for target_temp in temp_points:
         print(f"\n{'='*60}")
         print(f"Temperature: {target_temp} K")
@@ -895,7 +903,7 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
             set_bias_and_wait(lcr_ctrl, bias, settle_time=1.0)
             
             bias_str = f"neg{abs(bias):.2f}" if bias < 0 else f"pos{bias:.2f}"
-            filename = data_dir / f"run{run_count:03d}_temp_{actual_temp:.0f}_DC_{bias_str}V.csv"
+            filename = data_dir / f"run{run_count:03d}_temp_{actual_temp:.0f}_DC_{bias_str}V{filename_suffix}.csv"
             
             print(f"  Measuring -> {filename.name} ...")
             
@@ -980,13 +988,21 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
             display(fig)
             plt.close(fig)
             
+    # Put LCR in standby mode
+    print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger HOLD)...")
+    lcr_ctrl.signal_amplitude = 0.0
+    lcr_ctrl.bias = 0.0
+    lcr_ctrl.trigger_source = 'HOLD'
+    time.sleep(0.5)
+
     print(f"\n{'='*60}")
     print(f"✓ ALL MEASUREMENTS COMPLETE! Next run: {run_count}")
     print('='*60)
     return run_count
 
 def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points, 
-                                Vmin, Vmax, Vstep, Vrms, cycles, janis_ctrl, lcr_ctrl, run_count_start=1):
+                                Vmin, Vmax, Vstep, Vrms, cycles, janis_ctrl, lcr_ctrl, 
+                                filename_suffix='', run_count_start=1):
     """
     Runs a temperature and CV sweep, with live plotting of Cp and Gp vs DC Bias.
     """
@@ -1006,6 +1022,11 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
     cmap = plt.get_cmap("viridis")
     linestyles = ["-", "--", ":", "-."]
     
+    print(f"Activating LCR signal amplitude to {Vrms} V and trigger INT...")
+    lcr_ctrl.signal_amplitude = Vrms
+    lcr_ctrl.trigger_source = 'INT'
+    time.sleep(0.5)
+    
     for target_temp in temp_points:
         print(f"\n{'='*60}")
         print(f"Temperature: {target_temp} K")
@@ -1016,12 +1037,13 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
         for c in range(1, cycles + 1):
             print(f"\n  Cycle: {c}/{cycles}")
             lcr_ctrl.signal_amplitude = Vrms
+            lcr_ctrl.trigger_source = 'INT'
             time.sleep(0.5)
             
             for freq_idx, freq in enumerate(freq_points):
                 filename = data_dir / (
                     f"run{run_count:03d}_CV_temp_{actual_temp:.0f}_freq_{int(freq)}Hz_"
-                    f"Vrms_{Vrms:.3f}V_cycle_{c}.csv"
+                    f"Vrms_{Vrms:.3f}V_cycle_{c}{filename_suffix}.csv"
                 )
                 print(f"  Measuring CV @ {freq:.0f} Hz -> {filename.name}")
                 
@@ -1099,6 +1121,13 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
                 display(fig)
                 plt.close(fig)
                 
+    # Put LCR in standby mode
+    print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger HOLD)...")
+    lcr_ctrl.signal_amplitude = 0.0
+    lcr_ctrl.bias = 0.0
+    lcr_ctrl.trigger_source = 'HOLD'
+    time.sleep(0.5)
+
     print(f"\n{'='*60}")
     print(f"✓ CV MEASUREMENTS COMPLETE! Next run: {run_count}")
     print('='*60)

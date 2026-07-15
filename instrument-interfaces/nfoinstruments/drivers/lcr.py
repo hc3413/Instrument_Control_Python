@@ -99,6 +99,7 @@ class E4890A(LCR):
             self.measurement_timeout = self.DEFAULT_MEASUREMENT_TIMEOUT
             self._signal_type = self.DEFAULT_SIGNAL_TYPE
             self._alc_enabled = self.DEFAULT_ALC_ENABLED
+            self._trigger_source = 'INT'
         
         self._initialize()
 
@@ -274,6 +275,17 @@ class E4890A(LCR):
             self.resource.write("AMPL:ALC ON")
         else:
             self.resource.write("AMPL:ALC OFF")
+
+    @property
+    def trigger_source(self):
+        return self._trigger_source
+
+    @trigger_source.setter
+    def trigger_source(self, source):
+        if source.upper() not in ['INT', 'EXT', 'BUS', 'HOLD']:
+            raise ValueError("Trigger source must be INT, EXT, BUS, or HOLD")
+        self._trigger_source = source.upper()
+        self.resource.write(f"TRIG:SOUR {self._trigger_source}")
 
     @property
     def measurement(self):
