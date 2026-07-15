@@ -857,9 +857,10 @@ def plot_cv_comparison(data_dir, pattern="run*.csv", file_indices=None,
 
 def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_points, bias_points, 
                                               janis_ctrl, lcr_ctrl, freq_points, Vrms=0.05, 
-                                              filename_suffix='', run_count_start=1):
+                                              filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30):
     """
     Runs a temperature and bias sweep, with live plotting of Bode and Modulus plots.
+    Loads existing data from the directory to overlay.
     
     Args:
         parent_dir (Path): Base directory for data.
@@ -872,31 +873,77 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
         Vrms (float): AC signal amplitude to use during measurement (V).
         filename_suffix (str): Custom string to append to filename (e.g., '_pristine').
         run_count_start (int): Starting run number for file naming.
+        run_select (list): Optional list of integers. If provided, only historical runs with these numbers are plotted.
     """
     import time
     import numpy as np
+    import pandas as pd
     import matplotlib.pyplot as plt
+    import re
     from IPython.display import display, clear_output
     
     data_dir = parent_dir / sweep_name
     data_dir.mkdir(parents=True, exist_ok=True)
     
-    run_count = run_count_start
     plot_data = [] 
     cmap = plt.get_cmap("viridis")
     linestyles = ["-", "--", ":", "-."]
     
-    print(f"Activating LCR signal amplitude to {Vrms} V and trigger INT...")
-    lcr_ctrl.signal_amplitude = Vrms
-    lcr_ctrl.trigger_source = 'INT'
-    time.sleep(0.5)
+    # Pre-load existing runs for overlay
+    existing_files = sorted(data_dir.glob("run*.csv"))
+    for file in existing_files:
+        if "_CV_" in file.name:
+            continue
+            
+        run_match = re.search(r"run(\d+)_", file.name)
+        if run_match:
+            run_num = int(run_match.group(1))
+            if run_select is not None and run_num not in run_select:
+                continue
+                
+        temp_match = re.search(r"_temp_(\d+)", file.name)
+        bias_match = re.search(r"_DC_(neg|pos|)(\d+\.\d+)V", file.name)
+        
+        t_val = float(temp_match.group(1)) if temp_match else 295.0
+        if bias_match:
+            sign = -1.0 if bias_match.group(1) == "neg" else 1.0
+            b_val = sign * float(bias_match.group(2))
+        else:
+            b_val = 0.0
+            
+        try:
+            df = pd.read_csv(file, comment='#', header=None, skipinitialspace=True)
+            if len(df.columns) >= 6:
+                freqs = df.iloc[:, 2].values
+                Zs = df.iloc[:, 4].values
+                thetas = df.iloc[:, 5].values
+                plot_data.append({
+                    "temp": t_val,
+                    "bias": b_val,
+                    "freq": freqs,
+                    "Z": Zs,
+                    "theta": thetas
+                })
+        except Exception as e:
+            print(f"Warning: Failed to load {file.name} for overlay: {e}")
+            
+    run_count = run_count_start
     
     for target_temp in temp_points:
         print(f"\n{'='*60}")
         print(f"Temperature: {target_temp} K")
         print('='*60)
         
-        actual_temp = set_temperature_and_wait(janis_ctrl, target_temp, extra_settle_time=30, verbose=True)
+        actual_temp = janis_ctrl.temperature
+        if target_temp != actual_temp:
+            # We don't want to import set_temperature_and_wait due to scope issues, we can just call it
+            # But we need it imported. We'll import it directly:
+            from .utils import set_temperature_and_wait, set_bias_and_wait
+            actual_temp = set_temperature_and_wait(janis_ctrl, target_temp, extra_settle_time=extra_settle_time, verbose=True)
+        else:
+            print(f"Already at target temperature ({actual_temp} K).")
+            # import still needed for bias
+            from .utils import set_bias_and_wait
         
         for b_idx, bias in enumerate(bias_points):
             print(f"\n  Bias: {bias:+.2f} V")
@@ -906,6 +953,11 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
             filename = data_dir / f"run{run_count:03d}_temp_{actual_temp:.0f}_DC_{bias_str}V{filename_suffix}.csv"
             
             print(f"  Measuring -> {filename.name} ...")
+            
+            print(f"Activating LCR signal amplitude to {Vrms} V and trigger BUS...")
+            lcr_ctrl.signal_amplitude = Vrms
+            lcr_ctrl.trigger_source = 'BUS'
+            time.sleep(0.5)
             
             current_freq = []
             current_Z = []
@@ -917,6 +969,8 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
                 for i, freq in enumerate(freq_points, start=1):
                     lcr_ctrl.frequency = freq
                     time.sleep(0.05)
+                    # Send trigger for BUS mode
+                    lcr_ctrl.resource.write("*TRG")
                     result = lcr_ctrl.measurement
                     
                     data_line = f"{time.time()},{lcr_ctrl.bias},{freq},-1,{result[0]},{result[1]},{actual_temp}\n"
@@ -931,15 +985,16 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
                         print(f"    Progress: {i}/{len(freq_points)} points")
                         
             print(f"  ✓ Saved: {filename.name}")
-            run_count += 1
             
             plot_data.append({
                 "temp": actual_temp,
                 "bias": bias,
                 "freq": np.array(current_freq),
                 "Z": np.array(current_Z),
-                "theta": np.array(current_theta)
+                "theta": np.array(current_theta),
+                "run": run_count
             })
+            run_count += 1
             
             clear_output(wait=True)
             fig, axs = plt.subplots(2, 2, figsize=(15, 10))
@@ -948,17 +1003,20 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
             ax_mag, ax_phase = axs[0, 0], axs[0, 1]
             ax_m_real, ax_m_imag = axs[1, 0], axs[1, 1]
             
-            norm_temp = plt.Normalize(min(temp_points), max(temp_points)) if len(temp_points) > 1 else plt.Normalize(0, 1)
+            all_temps = [d['temp'] for d in plot_data]
+            norm_temp = plt.Normalize(min(all_temps), max(all_temps)) if len(set(all_temps)) > 1 else plt.Normalize(0, 1)
             
             for pd_dict in plot_data:
                 t_val, b_val = pd_dict["temp"], pd_dict["bias"]
                 f_arr, Z_arr, theta_arr = pd_dict["freq"], pd_dict["Z"], pd_dict["theta"]
                 
-                color = cmap(norm_temp(t_val)) if len(temp_points) > 1 else cmap(0.5)
+                color = cmap(norm_temp(t_val)) if len(set(all_temps)) > 1 else cmap(0.5)
                 ls_idx = bias_points.index(b_val) % len(linestyles) if b_val in bias_points else 0
                 ls = linestyles[ls_idx]
                 
                 label = f"{t_val:.0f}K, {b_val:+.2f}V"
+                if "run" in pd_dict:
+                    label += f" (Run {pd_dict['run']})"
                 
                 ax_mag.loglog(f_arr, Z_arr, color=color, linestyle=ls, label=label)
                 ax_phase.semilogx(f_arr, theta_arr, color=color, linestyle=ls, label=label)
@@ -988,13 +1046,12 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
             display(fig)
             plt.close(fig)
             
-    # Put LCR in standby mode
-    print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger HOLD)...")
+    print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger BUS)...")
     lcr_ctrl.signal_amplitude = 0.0
     lcr_ctrl.bias = 0.0
-    lcr_ctrl.trigger_source = 'HOLD'
+    lcr_ctrl.trigger_source = 'BUS'
     time.sleep(0.5)
-
+            
     print(f"\n{'='*60}")
     print(f"✓ ALL MEASUREMENTS COMPLETE! Next run: {run_count}")
     print('='*60)
@@ -1002,14 +1059,18 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
 
 def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points, 
                                 Vmin, Vmax, Vstep, Vrms, cycles, janis_ctrl, lcr_ctrl, 
-                                filename_suffix='', run_count_start=1):
+                                filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30):
     """
     Runs a temperature and CV sweep, with live plotting of Cp and Gp vs DC Bias.
+    Loads existing data from the directory to overlay.
     """
     import time
     import numpy as np
+    import pandas as pd
     import matplotlib.pyplot as plt
+    import re
     from IPython.display import display, clear_output
+    from .utils import set_temperature_and_wait, build_cv_bias_path
     
     data_dir = parent_dir / sweep_name
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -1017,27 +1078,61 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
     Vdc_path = build_cv_bias_path(v_min=Vmin, v_max=Vmax, v_step=Vstep)
     lcr_ctrl.measurement_type = lcr_ctrl.MeasurementType.CPG
     
-    run_count = run_count_start
     plot_data = []
     cmap = plt.get_cmap("viridis")
     linestyles = ["-", "--", ":", "-."]
     
-    print(f"Activating LCR signal amplitude to {Vrms} V and trigger INT...")
-    lcr_ctrl.signal_amplitude = Vrms
-    lcr_ctrl.trigger_source = 'INT'
-    time.sleep(0.5)
+    # Pre-load existing runs for overlay
+    existing_files = sorted(data_dir.glob("run*_CV_*.csv"))
+    for file in existing_files:
+        run_match = re.search(r"run(\d+)_", file.name)
+        if run_match:
+            run_num = int(run_match.group(1))
+            if run_select is not None and run_num not in run_select:
+                continue
+                
+        temp_match = re.search(r"_temp_(\d+)", file.name)
+        freq_match = re.search(r"_freq_(\d+)Hz", file.name)
+        cycle_match = re.search(r"_cycle_(\d+)", file.name)
+        
+        t_val = float(temp_match.group(1)) if temp_match else 295.0
+        f_val = float(freq_match.group(1)) if freq_match else 1e4
+        c_val = int(cycle_match.group(1)) if cycle_match else 1
+        
+        try:
+            df = pd.read_csv(file, comment='#', header=None, skipinitialspace=True)
+            if len(df.columns) >= 6:
+                biases = df.iloc[:, 1].values
+                Cps = df.iloc[:, 4].values
+                Gps = df.iloc[:, 5].values
+                plot_data.append({
+                    "temp": t_val,
+                    "cycle": c_val,
+                    "freq": f_val,
+                    "bias": biases,
+                    "Cp": Cps,
+                    "Gp": Gps
+                })
+        except Exception as e:
+            print(f"Warning: Failed to load {file.name} for overlay: {e}")
+
+    run_count = run_count_start
     
     for target_temp in temp_points:
         print(f"\n{'='*60}")
         print(f"Temperature: {target_temp} K")
         print('='*60)
         
-        actual_temp = set_temperature_and_wait(janis_ctrl, target_temp, extra_settle_time=30, verbose=True)
+        actual_temp = janis_ctrl.temperature
+        if target_temp != actual_temp:
+            actual_temp = set_temperature_and_wait(janis_ctrl, target_temp, extra_settle_time=extra_settle_time, verbose=True)
+        else:
+            print(f"Already at target temperature ({actual_temp} K).")
         
         for c in range(1, cycles + 1):
             print(f"\n  Cycle: {c}/{cycles}")
             lcr_ctrl.signal_amplitude = Vrms
-            lcr_ctrl.trigger_source = 'INT'
+            lcr_ctrl.trigger_source = 'BUS'
             time.sleep(0.5)
             
             for freq_idx, freq in enumerate(freq_points):
@@ -1061,6 +1156,8 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
                     for i, bias in enumerate(Vdc_path, start=1):
                         lcr_ctrl.bias = float(bias)
                         time.sleep(0.1)
+                        # Send trigger for BUS mode
+                        lcr_ctrl.resource.write("*TRG")
                         result = lcr_ctrl.measurement # [Cp, Gp]
                         
                         data_line = f"{time.time()},{lcr_ctrl.bias},{freq},-1,{result[0]},{result[1]},{actual_temp}\n"
@@ -1072,7 +1169,6 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
                         current_Gp.append(result[1])
                 
                 print(f"  ✓ Saved: {filename.name}")
-                run_count += 1
                 
                 plot_data.append({
                     "temp": actual_temp,
@@ -1080,22 +1176,24 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
                     "freq": freq,
                     "bias": np.array(current_bias),
                     "Cp": np.array(current_Cp),
-                    "Gp": np.array(current_Gp)
+                    "Gp": np.array(current_Gp),
+                    "run": run_count
                 })
+                run_count += 1
                 
-                # --- LIVE PLOTTING ---
                 clear_output(wait=True)
                 fig, axs = plt.subplots(1, 2, figsize=(14, 5))
                 fig.suptitle(f"Live CV Measurements - Latest Temp: {actual_temp:.0f}K", fontsize=16)
                 
                 ax_cp, ax_gp = axs[0], axs[1]
-                norm_temp = plt.Normalize(min(temp_points), max(temp_points)) if len(temp_points) > 1 else plt.Normalize(0, 1)
+                all_temps = [d['temp'] for d in plot_data]
+                norm_temp = plt.Normalize(min(all_temps), max(all_temps)) if len(set(all_temps)) > 1 else plt.Normalize(0, 1)
                 
                 for pd_dict in plot_data:
                     t_val, c_val, f_val = pd_dict["temp"], pd_dict["cycle"], pd_dict["freq"]
                     b_arr, cp_arr, gp_arr = pd_dict["bias"], pd_dict["Cp"], pd_dict["Gp"]
                     
-                    color = cmap(norm_temp(t_val)) if len(temp_points) > 1 else cmap(0.5)
+                    color = cmap(norm_temp(t_val)) if len(set(all_temps)) > 1 else cmap(0.5)
                     try:
                         ls_idx = freq_points.index(f_val) % len(linestyles) if f_val in freq_points else 0
                     except ValueError:
@@ -1103,6 +1201,8 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
                     ls = linestyles[ls_idx]
                     
                     label = f"{t_val:.0f}K, {f_val:.0f}Hz, Cyc {c_val}"
+                    if "run" in pd_dict:
+                        label += f" (Run {pd_dict['run']})"
                     
                     ax_cp.plot(b_arr, cp_arr, color=color, linestyle=ls, label=label)
                     ax_gp.plot(b_arr, gp_arr, color=color, linestyle=ls, label=label)
@@ -1121,13 +1221,12 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
                 display(fig)
                 plt.close(fig)
                 
-    # Put LCR in standby mode
-    print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger HOLD)...")
+    print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger BUS)...")
     lcr_ctrl.signal_amplitude = 0.0
     lcr_ctrl.bias = 0.0
-    lcr_ctrl.trigger_source = 'HOLD'
+    lcr_ctrl.trigger_source = 'BUS'
     time.sleep(0.5)
-
+    
     print(f"\n{'='*60}")
     print(f"✓ CV MEASUREMENTS COMPLETE! Next run: {run_count}")
     print('='*60)
