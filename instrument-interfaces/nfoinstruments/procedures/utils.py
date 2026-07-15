@@ -851,13 +851,214 @@ def plot_cv_comparison(data_dir, pattern="run*.csv", file_indices=None,
 
 
 
+
+# =============================================================================
+# Standalone Plotting Functions
+# =============================================================================
+
+def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements", log_y_left=False, log_y_right=False):
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from IPython.display import display, clear_output
+    
+    plot_is_overlay(plot_data, temp_points, bias_points, title=f"Live IS - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right)
+        return
+        
+    norm_temp = plt.Normalize(min(all_temps), max(all_temps)) if len(set(all_temps)) > 1 else plt.Normalize(0, 1)
+    
+    for pd_dict in plot_data:
+        t_val, b_val = pd_dict["temp"], pd_dict["bias"]
+        f_arr, Z_arr, theta_arr = pd_dict["freq"], pd_dict["Z"], pd_dict["theta"]
+        
+        color = cmap(norm_temp(t_val)) if len(set(all_temps)) > 1 else cmap(0.5)
+        try:
+            ls_idx = bias_points.index(b_val) % len(linestyles) if b_val in bias_points else 0
+        except ValueError:
+            ls_idx = 0
+        ls = linestyles[ls_idx]
+        
+        label = f"{t_val:.0f}K, {b_val:+.2f}V"
+        if "run" in pd_dict:
+            label += f" (Run {pd_dict['run']})"
+        
+        # Bode Magnitude
+        if log_y_left:
+            ax_mag.loglog(f_arr, Z_arr, color=color, linestyle=ls, label=label)
+        else:
+            # Default IS Mag is usually loglog, but user wants toggle
+            ax_mag.semilogx(f_arr, Z_arr, color=color, linestyle=ls, label=label)
+            
+        # Bode Phase
+        if log_y_right:
+            ax_phase.semilogy(f_arr, theta_arr, color=color, linestyle=ls, label=label)
+        else:
+            ax_phase.semilogx(f_arr, theta_arr, color=color, linestyle=ls, label=label)
+        
+        theta_rad = np.radians(theta_arr)
+        Z_complex = Z_arr * np.exp(1j * theta_rad)
+        omega = 2 * np.pi * f_arr
+        
+        M_complex = 1j * omega * Z_complex
+        
+        if log_y_left:
+            ax_m_real.loglog(f_arr, np.abs(np.real(M_complex)), color=color, linestyle=ls, label=label) # Log of absolute
+        else:
+            ax_m_real.semilogx(f_arr, np.real(M_complex), color=color, linestyle=ls, label=label)
+            
+        if log_y_right:
+            ax_m_imag.loglog(f_arr, np.abs(np.imag(M_complex)), color=color, linestyle=ls, label=label)
+        else:
+            ax_m_imag.semilogx(f_arr, np.imag(M_complex), color=color, linestyle=ls, label=label)
+
+    # Note: Using default log scale for x-axis as it's frequency
+    ax_mag.set(xlabel="Frequency (Hz)", ylabel="|Z| (Ω)", title="Bode Plot: Magnitude")
+    ax_mag.grid(True, which="both", ls="--", alpha=0.5)
+    
+    ax_phase.set(xlabel="Frequency (Hz)", ylabel="Phase $\\theta$ (°)", title="Bode Plot: Phase")
+    ax_phase.grid(True, which="both", ls="--", alpha=0.5)
+    
+    ax_m_real.set(xlabel="Frequency (Hz)", ylabel="M' / $C_0$", title="Modulus: Real Part")
+    ax_m_real.grid(True, which="both", ls="--", alpha=0.5)
+    
+    ax_m_imag.set(xlabel="Frequency (Hz)", ylabel="M'' / $C_0$", title="Modulus: Imaginary Part")
+    ax_m_imag.grid(True, which="both", ls="--", alpha=0.5)
+    
+    handles, labels = ax_mag.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    ax_mag.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
+    
+    plt.tight_layout()
+    display(fig)
+    plt.close(fig)
+
+
+def plot_cv_overlay(plot_data, temp_points, freq_points, title="CV Measurements", log_y_left=False, log_y_right=False):
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from IPython.display import display, clear_output
+    
+    plot_cv_overlay(plot_data, temp_points, freq_points, title=f"Live CV - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right)
+        return
+        
+    norm_temp = plt.Normalize(min(all_temps), max(all_temps)) if len(set(all_temps)) > 1 else plt.Normalize(0, 1)
+    
+    for pd_dict in plot_data:
+        t_val, c_val, f_val = pd_dict["temp"], pd_dict["cycle"], pd_dict["freq"]
+        b_arr, cp_arr, gp_arr = pd_dict["bias"], pd_dict["Cp"], pd_dict["Gp"]
+        
+        color = cmap(norm_temp(t_val)) if len(set(all_temps)) > 1 else cmap(0.5)
+        try:
+            ls_idx = freq_points.index(f_val) % len(linestyles) if f_val in freq_points else 0
+        except ValueError:
+            ls_idx = 0
+        ls = linestyles[ls_idx]
+        
+        label = f"{t_val:.0f}K, {f_val:.0f}Hz, Cyc {c_val}"
+        if "run" in pd_dict:
+            label += f" (Run {pd_dict['run']})"
+        
+        ax_cp.plot(b_arr, cp_arr, color=color, linestyle=ls, label=label)
+        ax_gp.plot(b_arr, gp_arr, color=color, linestyle=ls, label=label)
+    
+    if log_y_left:
+        ax_cp.set_yscale('log')
+    if log_y_right:
+        ax_gp.set_yscale('log')
+        
+    ax_cp.set(xlabel="DC Bias (V)", ylabel="Capacitance Cp (F)", title="C-V Curve")
+    ax_cp.grid(True, ls="--", alpha=0.5)
+    
+    ax_gp.set(xlabel="DC Bias (V)", ylabel="Conductance Gp (S)", title="G-V Curve")
+    ax_gp.grid(True, ls="--", alpha=0.5)
+    
+    handles, labels = ax_cp.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    ax_cp.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
+    
+    plt.tight_layout()
+    display(fig)
+    plt.close(fig)
+
+
+def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)", log_y_left=False, log_y_right=False):
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from IPython.display import display, clear_output
+    
+    plot_is_overlay(plot_data, temp_points, bias_points, title=f"Live IS - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right)
+        return
+        
+    for i, pd_dict in enumerate(plot_data):
+        t_arr = pd_dict["time"]
+        Z_arr = pd_dict["Z"]
+        theta_arr = pd_dict["theta"]
+        freq = pd_dict["freq"]
+        bias = pd_dict["bias"]
+        vrms = pd_dict["vrms"]
+        
+        # Color based on run index
+        color = cmap(i / max(1, len(plot_data)))
+        
+        label = f"{freq:.0f}Hz, {bias:+.2f}VDC, {vrms:.3f}VAC"
+        if "run" in pd_dict:
+            label += f" (Run {pd_dict['run']})"
+        
+        # We plot against elapsed time
+        t_elapsed = t_arr - t_arr[0] if len(t_arr) > 0 else t_arr
+        
+        if log_y_left:
+            ax_mag.semilogy(t_elapsed, Z_arr, color=color, label=label)
+        else:
+            ax_mag.plot(t_elapsed, Z_arr, color=color, label=label)
+            
+        if log_y_right:
+            ax_phase.semilogy(t_elapsed, theta_arr, color=color, label=label)
+        else:
+            ax_phase.plot(t_elapsed, theta_arr, color=color, label=label)
+            
+        theta_rad = np.radians(theta_arr)
+        Z_complex = Z_arr * np.exp(1j * theta_rad)
+        omega = 2 * np.pi * freq
+        M_complex = 1j * omega * Z_complex
+        
+        if log_y_left:
+            ax_m_real.semilogy(t_elapsed, np.abs(np.real(M_complex)), color=color, label=label)
+        else:
+            ax_m_real.plot(t_elapsed, np.real(M_complex), color=color, label=label)
+            
+        if log_y_right:
+            ax_m_imag.semilogy(t_elapsed, np.abs(np.imag(M_complex)), color=color, label=label)
+        else:
+            ax_m_imag.plot(t_elapsed, np.imag(M_complex), color=color, label=label)
+
+    ax_mag.set(xlabel="Time (s)", ylabel="|Z| (Ω)", title="Magnitude vs Time")
+    ax_mag.grid(True, ls="--", alpha=0.5)
+    
+    ax_phase.set(xlabel="Time (s)", ylabel="Phase $\\theta$ (°)", title="Phase vs Time")
+    ax_phase.grid(True, ls="--", alpha=0.5)
+    
+    ax_m_real.set(xlabel="Time (s)", ylabel="M' / $C_0$", title="Modulus Real vs Time")
+    ax_m_real.grid(True, ls="--", alpha=0.5)
+    
+    ax_m_imag.set(xlabel="Time (s)", ylabel="M'' / $C_0$", title="Modulus Imag vs Time")
+    ax_m_imag.grid(True, ls="--", alpha=0.5)
+    
+    handles, labels = ax_mag.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    ax_mag.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
+    
+    plt.tight_layout()
+    display(fig)
+    plt.close(fig)
+
 # =============================================================================
 # Automated Measurement Sequences with Live Plotting
 # =============================================================================
 
+
 def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_points, bias_points, 
                                               janis_ctrl, lcr_ctrl, freq_points, Vrms=0.05, 
-                                              filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30):
+                                              filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30, log_y_left=True, log_y_right=False):
     """
     Runs a temperature and bias sweep, with live plotting of Bode and Modulus plots.
     Loads existing data from the directory to overlay.
@@ -996,55 +1197,7 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
             })
             run_count += 1
             
-            clear_output(wait=True)
-            fig, axs = plt.subplots(2, 2, figsize=(15, 10))
-            fig.suptitle(f"Live Measurements - Latest Temp: {actual_temp:.0f}K, Bias: {bias:+.2f}V", fontsize=16)
-            
-            ax_mag, ax_phase = axs[0, 0], axs[0, 1]
-            ax_m_real, ax_m_imag = axs[1, 0], axs[1, 1]
-            
-            all_temps = [d['temp'] for d in plot_data]
-            norm_temp = plt.Normalize(min(all_temps), max(all_temps)) if len(set(all_temps)) > 1 else plt.Normalize(0, 1)
-            
-            for pd_dict in plot_data:
-                t_val, b_val = pd_dict["temp"], pd_dict["bias"]
-                f_arr, Z_arr, theta_arr = pd_dict["freq"], pd_dict["Z"], pd_dict["theta"]
-                
-                color = cmap(norm_temp(t_val)) if len(set(all_temps)) > 1 else cmap(0.5)
-                ls_idx = bias_points.index(b_val) % len(linestyles) if b_val in bias_points else 0
-                ls = linestyles[ls_idx]
-                
-                label = f"{t_val:.0f}K, {b_val:+.2f}V"
-                if "run" in pd_dict:
-                    label += f" (Run {pd_dict['run']})"
-                
-                ax_mag.loglog(f_arr, Z_arr, color=color, linestyle=ls, label=label)
-                ax_phase.semilogx(f_arr, theta_arr, color=color, linestyle=ls, label=label)
-                
-                theta_rad = np.radians(theta_arr)
-                Z_complex = Z_arr * np.exp(1j * theta_rad)
-                omega = 2 * np.pi * f_arr
-                
-                M_complex = 1j * omega * Z_complex
-                ax_m_real.semilogx(f_arr, np.real(M_complex), color=color, linestyle=ls, label=label)
-                ax_m_imag.semilogx(f_arr, np.imag(M_complex), color=color, linestyle=ls, label=label)
-
-            ax_mag.set(xlabel="Frequency (Hz)", ylabel="|Z| (Ω)", title="Bode Plot: Magnitude")
-            ax_mag.grid(True, which="both", ls="--", alpha=0.5)
-            ax_phase.set(xlabel="Frequency (Hz)", ylabel="Phase $\theta$ (°)", title="Bode Plot: Phase")
-            ax_phase.grid(True, which="both", ls="--", alpha=0.5)
-            ax_m_real.set(xlabel="Frequency (Hz)", ylabel="M' / $C_0$", title="Modulus: Real Part ($M' \propto \omega Z''$)")
-            ax_m_real.grid(True, which="both", ls="--", alpha=0.5)
-            ax_m_imag.set(xlabel="Frequency (Hz)", ylabel="M'' / $C_0$", title="Modulus: Imaginary Part ($M'' \propto \omega Z'$)")
-            ax_m_imag.grid(True, which="both", ls="--", alpha=0.5)
-            
-            handles, labels = ax_mag.get_legend_handles_labels()
-            by_label = dict(zip(labels, handles))
-            ax_mag.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
-            
-            plt.tight_layout()
-            display(fig)
-            plt.close(fig)
+            plot_is_overlay(plot_data, temp_points, bias_points, title=f"Live IS - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right)
             
     print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger BUS)...")
     lcr_ctrl.signal_amplitude = 0.0
@@ -1059,7 +1212,7 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
 
 def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points, 
                                 Vmin, Vmax, Vstep, Vrms, cycles, janis_ctrl, lcr_ctrl, 
-                                filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30):
+                                filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30, log_y_left=True, log_y_right=False):
     """
     Runs a temperature and CV sweep, with live plotting of Cp and Gp vs DC Bias.
     Loads existing data from the directory to overlay.
@@ -1181,45 +1334,7 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
                 })
                 run_count += 1
                 
-                clear_output(wait=True)
-                fig, axs = plt.subplots(1, 2, figsize=(14, 5))
-                fig.suptitle(f"Live CV Measurements - Latest Temp: {actual_temp:.0f}K", fontsize=16)
-                
-                ax_cp, ax_gp = axs[0], axs[1]
-                all_temps = [d['temp'] for d in plot_data]
-                norm_temp = plt.Normalize(min(all_temps), max(all_temps)) if len(set(all_temps)) > 1 else plt.Normalize(0, 1)
-                
-                for pd_dict in plot_data:
-                    t_val, c_val, f_val = pd_dict["temp"], pd_dict["cycle"], pd_dict["freq"]
-                    b_arr, cp_arr, gp_arr = pd_dict["bias"], pd_dict["Cp"], pd_dict["Gp"]
-                    
-                    color = cmap(norm_temp(t_val)) if len(set(all_temps)) > 1 else cmap(0.5)
-                    try:
-                        ls_idx = freq_points.index(f_val) % len(linestyles) if f_val in freq_points else 0
-                    except ValueError:
-                        ls_idx = 0
-                    ls = linestyles[ls_idx]
-                    
-                    label = f"{t_val:.0f}K, {f_val:.0f}Hz, Cyc {c_val}"
-                    if "run" in pd_dict:
-                        label += f" (Run {pd_dict['run']})"
-                    
-                    ax_cp.plot(b_arr, cp_arr, color=color, linestyle=ls, label=label)
-                    ax_gp.plot(b_arr, gp_arr, color=color, linestyle=ls, label=label)
-                
-                ax_cp.set(xlabel="DC Bias (V)", ylabel="Capacitance Cp (F)", title="C-V Curve")
-                ax_cp.grid(True, ls="--", alpha=0.5)
-                
-                ax_gp.set(xlabel="DC Bias (V)", ylabel="Conductance Gp (S)", title="G-V Curve")
-                ax_gp.grid(True, ls="--", alpha=0.5)
-                
-                handles, labels = ax_cp.get_legend_handles_labels()
-                by_label = dict(zip(labels, handles))
-                ax_cp.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
-                
-                plt.tight_layout()
-                display(fig)
-                plt.close(fig)
+                plot_cv_overlay(plot_data, temp_points, freq_points, title=f"Live CV - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right)
                 
     print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger BUS)...")
     lcr_ctrl.signal_amplitude = 0.0
@@ -1229,5 +1344,154 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
     
     print(f"\n{'='*60}")
     print(f"✓ CV MEASUREMENTS COMPLETE! Next run: {run_count}")
+    print('='*60)
+    return run_count
+
+
+def run_time_scan_with_live_plot(parent_dir, sweep_name, freq_points, Vdc_points, Vrms_points, 
+                                 scan_duration, janis_ctrl, lcr_ctrl, 
+                                 update_interval=2.0, filename_suffix='', run_count_start=1, run_select=None,
+                                 log_y_left=False, log_y_right=False):
+    """
+    Runs a time scan at a fixed frequency and DC bias, monitoring Z and theta over time.
+    Loops through combinations of freq, Vdc, Vrms.
+    """
+    import time
+    import numpy as np
+    import pandas as pd
+    import re
+    from pathlib import Path
+    
+    data_dir = parent_dir / sweep_name
+    data_dir.mkdir(parents=True, exist_ok=True)
+    
+    plot_data = []
+    
+    # Pre-load existing runs
+    existing_files = sorted(data_dir.glob("run*_TimeScan_*.csv"))
+    for file in existing_files:
+        run_match = re.search(r"run(\d+)_", file.name)
+        if run_match:
+            run_num = int(run_match.group(1))
+            if run_select is not None and run_num not in run_select:
+                continue
+                
+        freq_match = re.search(r"_freq_(\d+\.\d+)Hz", file.name)
+        vdc_match = re.search(r"_DC_(neg|pos|)(\d+\.\d+)V", file.name)
+        vrms_match = re.search(r"_VAC_(\d+\.\d+)V", file.name)
+        
+        f_val = float(freq_match.group(1)) if freq_match else 1e4
+        
+        if vdc_match:
+            sign = -1.0 if vdc_match.group(1) == "neg" else 1.0
+            vdc_val = sign * float(vdc_match.group(2))
+        else:
+            vdc_val = 0.0
+            
+        vrms_val = float(vrms_match.group(1)) if vrms_match else 0.05
+        
+        try:
+            df = pd.read_csv(file, comment='#', header=None, skipinitialspace=True)
+            if len(df.columns) >= 6:
+                times = df.iloc[:, 0].values
+                Zs = df.iloc[:, 4].values
+                thetas = df.iloc[:, 5].values
+                plot_data.append({
+                    "time": times,
+                    "freq": f_val,
+                    "bias": vdc_val,
+                    "vrms": vrms_val,
+                    "Z": Zs,
+                    "theta": thetas,
+                    "run": run_num if run_match else 0
+                })
+        except Exception as e:
+            print(f"Warning: Failed to load {file.name} for overlay: {e}")
+
+    run_count = run_count_start
+    actual_temp = janis_ctrl.temperature if janis_ctrl else 295.0
+    
+    lcr_ctrl.measurement_type = lcr_ctrl.MeasurementType.ZTD
+    
+    for vrms in Vrms_points:
+        for vdc in Vdc_points:
+            for freq in freq_points:
+                print(f"\n{'='*60}")
+                print(f"Time Scan: {freq} Hz, {vdc:+.2f} VDC, {vrms} VAC for {scan_duration}s")
+                print('='*60)
+                
+                lcr_ctrl.signal_amplitude = vrms
+                lcr_ctrl.bias = vdc
+                lcr_ctrl.frequency = freq
+                lcr_ctrl.trigger_source = 'BUS'
+                time.sleep(0.5)
+                
+                bias_str = f"neg{abs(vdc):.2f}" if vdc < 0 else f"pos{vdc:.2f}"
+                filename = data_dir / f"run{run_count:03d}_TimeScan_temp_{actual_temp:.0f}_freq_{freq:.2f}Hz_DC_{bias_str}V_VAC_{vrms:.3f}V{filename_suffix}.csv"
+                print(f"  Measuring -> {filename.name} ...")
+                
+                current_time = []
+                current_Z = []
+                current_theta = []
+                
+                with open(filename, "w") as f:
+                    f.write("# Type: Time_Scan\n")
+                    f.write(f"# Frequency: {freq} Hz\n")
+                    f.write(f"# Vrms: {vrms} V\n")
+                    f.write(f"# Vdc: {vdc} V\n")
+                    f.write("# time,bias,frequency,NA,Z,theta,temp\n")
+                    
+                    start_time = time.time()
+                    last_plot_time = start_time
+                    
+                    # Create dictionary in plot_data early so we can update it in place
+                    current_dict = {
+                        "time": np.array([]), "freq": freq, "bias": vdc, "vrms": vrms,
+                        "Z": np.array([]), "theta": np.array([]), "run": run_count
+                    }
+                    plot_data.append(current_dict)
+                    
+                    while (time.time() - start_time) < scan_duration:
+                        lcr_ctrl.resource.write("*TRG")
+                        result = lcr_ctrl.measurement
+                        now = time.time()
+                        
+                        data_line = f"{now},{vdc},{freq},-1,{result[0]},{result[1]},{actual_temp}\n"
+                        f.write(data_line)
+                        f.flush()
+                        
+                        current_time.append(now)
+                        current_Z.append(result[0])
+                        current_theta.append(result[1])
+                        
+                        if (now - last_plot_time) > update_interval:
+                            # Update dictionary and plot
+                            current_dict["time"] = np.array(current_time)
+                            current_dict["Z"] = np.array(current_Z)
+                            current_dict["theta"] = np.array(current_theta)
+                            
+                            plot_time_scan_overlay(plot_data, title=f"Live Drift - Run {run_count}", 
+                                                   log_y_left=log_y_left, log_y_right=log_y_right)
+                            last_plot_time = now
+                            
+                print(f"  ✓ Saved: {filename.name}")
+                
+                # Final plot update
+                current_dict["time"] = np.array(current_time)
+                current_dict["Z"] = np.array(current_Z)
+                current_dict["theta"] = np.array(current_theta)
+                plot_time_scan_overlay(plot_data, title=f"Live Drift - Run {run_count}", 
+                                       log_y_left=log_y_left, log_y_right=log_y_right)
+                
+                run_count += 1
+                
+    print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger BUS)...")
+    lcr_ctrl.signal_amplitude = 0.0
+    lcr_ctrl.bias = 0.0
+    lcr_ctrl.trigger_source = 'BUS'
+    time.sleep(0.5)
+    
+    print(f"\n{'='*60}")
+    print(f"✓ TIME SCAN MEASUREMENTS COMPLETE! Next run: {run_count}")
     print('='*60)
     return run_count
