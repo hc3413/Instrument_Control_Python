@@ -861,7 +861,20 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
     import numpy as np
     from IPython.display import display, clear_output
     
-    plot_is_overlay(plot_data, temp_points, bias_points, title=f"Live IS - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right)
+    clear_output(wait=True)
+    fig, axs = plt.subplots(2, 2, figsize=(15, 10))
+    fig.suptitle(title, fontsize=16)
+    
+    ax_mag, ax_phase = axs[0, 0], axs[0, 1]
+    ax_m_real, ax_m_imag = axs[1, 0], axs[1, 1]
+    
+    cmap = plt.get_cmap("viridis")
+    linestyles = ["-", "--", ":", "-."]
+    
+    all_temps = [d['temp'] for d in plot_data]
+    if len(all_temps) == 0:
+        display(fig)
+        plt.close(fig)
         return
         
     norm_temp = plt.Normalize(min(all_temps), max(all_temps)) if len(set(all_temps)) > 1 else plt.Normalize(0, 1)
@@ -914,7 +927,7 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
     ax_mag.set(xlabel="Frequency (Hz)", ylabel="|Z| (Ω)", title="Bode Plot: Magnitude")
     ax_mag.grid(True, which="both", ls="--", alpha=0.5)
     
-    ax_phase.set(xlabel="Frequency (Hz)", ylabel="Phase $\\theta$ (°)", title="Bode Plot: Phase")
+    ax_phase.set(xlabel="Frequency (Hz)", ylabel="Phase $\theta$ (°)", title="Bode Plot: Phase")
     ax_phase.grid(True, which="both", ls="--", alpha=0.5)
     
     ax_m_real.set(xlabel="Frequency (Hz)", ylabel="M' / $C_0$", title="Modulus: Real Part")
@@ -937,7 +950,18 @@ def plot_cv_overlay(plot_data, temp_points, freq_points, title="CV Measurements"
     import numpy as np
     from IPython.display import display, clear_output
     
-    plot_cv_overlay(plot_data, temp_points, freq_points, title=f"Live CV - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right)
+    clear_output(wait=True)
+    fig, axs = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle(title, fontsize=16)
+    
+    ax_cp, ax_gp = axs[0], axs[1]
+    cmap = plt.get_cmap("viridis")
+    linestyles = ["-", "--", ":", "-."]
+    
+    all_temps = [d['temp'] for d in plot_data]
+    if len(all_temps) == 0:
+        display(fig)
+        plt.close(fig)
         return
         
     norm_temp = plt.Normalize(min(all_temps), max(all_temps)) if len(set(all_temps)) > 1 else plt.Normalize(0, 1)
@@ -985,7 +1009,18 @@ def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)", log_y_left=Fals
     import numpy as np
     from IPython.display import display, clear_output
     
-    plot_is_overlay(plot_data, temp_points, bias_points, title=f"Live IS - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right)
+    clear_output(wait=True)
+    fig, axs = plt.subplots(2, 2, figsize=(15, 10))
+    fig.suptitle(title, fontsize=16)
+    
+    ax_mag, ax_phase = axs[0, 0], axs[0, 1]
+    ax_m_real, ax_m_imag = axs[1, 0], axs[1, 1]
+    
+    cmap = plt.get_cmap("plasma")
+    
+    if len(plot_data) == 0:
+        display(fig)
+        plt.close(fig)
         return
         
     for i, pd_dict in enumerate(plot_data):
@@ -1034,7 +1069,7 @@ def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)", log_y_left=Fals
     ax_mag.set(xlabel="Time (s)", ylabel="|Z| (Ω)", title="Magnitude vs Time")
     ax_mag.grid(True, ls="--", alpha=0.5)
     
-    ax_phase.set(xlabel="Time (s)", ylabel="Phase $\\theta$ (°)", title="Phase vs Time")
+    ax_phase.set(xlabel="Time (s)", ylabel="Phase $\theta$ (°)", title="Phase vs Time")
     ax_phase.grid(True, ls="--", alpha=0.5)
     
     ax_m_real.set(xlabel="Time (s)", ylabel="M' / $C_0$", title="Modulus Real vs Time")
@@ -1051,6 +1086,7 @@ def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)", log_y_left=Fals
     display(fig)
     plt.close(fig)
 
+# =============================================================================
 # =============================================================================
 # Automated Measurement Sequences with Live Plotting
 # =============================================================================
