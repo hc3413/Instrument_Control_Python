@@ -287,8 +287,50 @@ class E4890A(LCR):
         self._trigger_source = source.upper()
         self.resource.write(f"TRIG:SOUR {self._trigger_source}")
 
+
+    @property
+    def correction_open_enabled(self):
+        return self.resource.query("CORR:OPEN:STAT?").strip() == "1"
+
+    @correction_open_enabled.setter
+    def correction_open_enabled(self, enabled):
+        state = "ON" if enabled else "OFF"
+        self.resource.write(f"CORR:OPEN:STAT {state}")
+
+    @property
+    def correction_short_enabled(self):
+        return self.resource.query("CORR:SHORT:STAT?").strip() == "1"
+
+    @correction_short_enabled.setter
+    def correction_short_enabled(self, enabled):
+        state = "ON" if enabled else "OFF"
+        self.resource.write(f"CORR:SHORT:STAT {state}")
+
+    def perform_open_correction(self):
+        """Executes the open correction sweep and blocks until complete."""
+        # Increase timeout temporarily as sweeps can take a while
+        original_timeout = self.resource.timeout
+        self.resource.timeout = 60000  # 60 seconds
+        try:
+            self.resource.write("CORR:OPEN:EXEC")
+            # Query *OPC? to block until operation is complete
+            self.resource.query("*OPC?")
+        finally:
+            self.resource.timeout = original_timeout
+
+    def perform_short_correction(self):
+        """Executes the short correction sweep and blocks until complete."""
+        original_timeout = self.resource.timeout
+        self.resource.timeout = 60000  # 60 seconds
+        try:
+            self.resource.write("CORR:SHORT:EXEC")
+            self.resource.query("*OPC?")
+        finally:
+            self.resource.timeout = original_timeout
+
     @property
     def measurement(self):
+
         result = self.resource.query("FETCH?").split(',')[0:2]
         return [float(val) for val in result]
 
