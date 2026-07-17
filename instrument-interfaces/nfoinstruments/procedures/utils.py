@@ -856,7 +856,8 @@ def plot_cv_comparison(data_dir, pattern="run*.csv", file_indices=None,
 # Standalone Plotting Functions
 # =============================================================================
 
-def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements", log_y_left=False, log_y_right=False):
+def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements", 
+                    log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None):
     import matplotlib.pyplot as plt
     import numpy as np
     from IPython.display import display, clear_output
@@ -873,6 +874,7 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
     
     all_temps = [d['temp'] for d in plot_data]
     if len(all_temps) == 0:
+        print("No matching data found to plot.")
         display(fig)
         plt.close(fig)
         return
@@ -885,7 +887,7 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
         
         color = cmap(norm_temp(t_val)) if len(set(all_temps)) > 1 else cmap(0.5)
         try:
-            ls_idx = bias_points.index(b_val) % len(linestyles) if b_val in bias_points else 0
+            ls_idx = bias_points.index(b_val) % len(linestyles) if (bias_points and b_val in bias_points) else 0
         except ValueError:
             ls_idx = 0
         ls = linestyles[ls_idx]
@@ -894,14 +896,11 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
         if "run" in pd_dict:
             label += f" (Run {pd_dict['run']})"
         
-        # Bode Magnitude
         if log_y_left:
             ax_mag.loglog(f_arr, Z_arr, color=color, linestyle=ls, label=label)
         else:
-            # Default IS Mag is usually loglog, but user wants toggle
             ax_mag.semilogx(f_arr, Z_arr, color=color, linestyle=ls, label=label)
             
-        # Bode Phase
         if log_y_right:
             ax_phase.semilogy(f_arr, theta_arr, color=color, linestyle=ls, label=label)
         else:
@@ -914,7 +913,7 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
         M_complex = 1j * omega * Z_complex
         
         if log_y_left:
-            ax_m_real.loglog(f_arr, np.abs(np.real(M_complex)), color=color, linestyle=ls, label=label) # Log of absolute
+            ax_m_real.loglog(f_arr, np.abs(np.real(M_complex)), color=color, linestyle=ls, label=label)
         else:
             ax_m_real.semilogx(f_arr, np.real(M_complex), color=color, linestyle=ls, label=label)
             
@@ -923,11 +922,17 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
         else:
             ax_m_imag.semilogx(f_arr, np.imag(M_complex), color=color, linestyle=ls, label=label)
 
-    # Note: Using default log scale for x-axis as it's frequency
+    if y_range_left is not None:
+        ax_mag.set_ylim(y_range_left)
+        ax_m_real.set_ylim(y_range_left)
+    if y_range_right is not None:
+        ax_phase.set_ylim(y_range_right)
+        ax_m_imag.set_ylim(y_range_right)
+
     ax_mag.set(xlabel="Frequency (Hz)", ylabel="|Z| (Ω)", title="Bode Plot: Magnitude")
     ax_mag.grid(True, which="both", ls="--", alpha=0.5)
     
-    ax_phase.set(xlabel="Frequency (Hz)", ylabel="Phase $\theta$ (°)", title="Bode Plot: Phase")
+    ax_phase.set(xlabel="Frequency (Hz)", ylabel="Phase $\\theta$ (°)", title="Bode Plot: Phase")
     ax_phase.grid(True, which="both", ls="--", alpha=0.5)
     
     ax_m_real.set(xlabel="Frequency (Hz)", ylabel="M' / $C_0$", title="Modulus: Real Part")
@@ -945,7 +950,8 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
     plt.close(fig)
 
 
-def plot_cv_overlay(plot_data, temp_points, freq_points, title="CV Measurements", log_y_left=False, log_y_right=False):
+def plot_cv_overlay(plot_data, temp_points, freq_points, title="CV Measurements", 
+                    log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None):
     import matplotlib.pyplot as plt
     import numpy as np
     from IPython.display import display, clear_output
@@ -960,6 +966,7 @@ def plot_cv_overlay(plot_data, temp_points, freq_points, title="CV Measurements"
     
     all_temps = [d['temp'] for d in plot_data]
     if len(all_temps) == 0:
+        print("No matching data found to plot.")
         display(fig)
         plt.close(fig)
         return
@@ -972,7 +979,7 @@ def plot_cv_overlay(plot_data, temp_points, freq_points, title="CV Measurements"
         
         color = cmap(norm_temp(t_val)) if len(set(all_temps)) > 1 else cmap(0.5)
         try:
-            ls_idx = freq_points.index(f_val) % len(linestyles) if f_val in freq_points else 0
+            ls_idx = freq_points.index(f_val) % len(linestyles) if (freq_points and f_val in freq_points) else 0
         except ValueError:
             ls_idx = 0
         ls = linestyles[ls_idx]
@@ -989,6 +996,11 @@ def plot_cv_overlay(plot_data, temp_points, freq_points, title="CV Measurements"
     if log_y_right:
         ax_gp.set_yscale('log')
         
+    if y_range_left is not None:
+        ax_cp.set_ylim(y_range_left)
+    if y_range_right is not None:
+        ax_gp.set_ylim(y_range_right)
+        
     ax_cp.set(xlabel="DC Bias (V)", ylabel="Capacitance Cp (F)", title="C-V Curve")
     ax_cp.grid(True, ls="--", alpha=0.5)
     
@@ -1004,7 +1016,8 @@ def plot_cv_overlay(plot_data, temp_points, freq_points, title="CV Measurements"
     plt.close(fig)
 
 
-def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)", log_y_left=False, log_y_right=False):
+def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)", 
+                           log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None):
     import matplotlib.pyplot as plt
     import numpy as np
     from IPython.display import display, clear_output
@@ -1019,6 +1032,7 @@ def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)", log_y_left=Fals
     cmap = plt.get_cmap("plasma")
     
     if len(plot_data) == 0:
+        print("No matching data found to plot.")
         display(fig)
         plt.close(fig)
         return
@@ -1031,14 +1045,12 @@ def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)", log_y_left=Fals
         bias = pd_dict["bias"]
         vrms = pd_dict["vrms"]
         
-        # Color based on run index
         color = cmap(i / max(1, len(plot_data)))
         
         label = f"{freq:.0f}Hz, {bias:+.2f}VDC, {vrms:.3f}VAC"
         if "run" in pd_dict:
             label += f" (Run {pd_dict['run']})"
         
-        # We plot against elapsed time
         t_elapsed = t_arr - t_arr[0] if len(t_arr) > 0 else t_arr
         
         if log_y_left:
@@ -1066,10 +1078,17 @@ def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)", log_y_left=Fals
         else:
             ax_m_imag.plot(t_elapsed, np.imag(M_complex), color=color, label=label)
 
+    if y_range_left is not None:
+        ax_mag.set_ylim(y_range_left)
+        ax_m_real.set_ylim(y_range_left)
+    if y_range_right is not None:
+        ax_phase.set_ylim(y_range_right)
+        ax_m_imag.set_ylim(y_range_right)
+
     ax_mag.set(xlabel="Time (s)", ylabel="|Z| (Ω)", title="Magnitude vs Time")
     ax_mag.grid(True, ls="--", alpha=0.5)
     
-    ax_phase.set(xlabel="Time (s)", ylabel="Phase $\theta$ (°)", title="Phase vs Time")
+    ax_phase.set(xlabel="Time (s)", ylabel="Phase $\\theta$ (°)", title="Phase vs Time")
     ax_phase.grid(True, ls="--", alpha=0.5)
     
     ax_m_real.set(xlabel="Time (s)", ylabel="M' / $C_0$", title="Modulus Real vs Time")
@@ -1085,6 +1104,184 @@ def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)", log_y_left=Fals
     plt.tight_layout()
     display(fig)
     plt.close(fig)
+
+# =============================================================================
+# Standalone Data Loaders for Plotting
+# =============================================================================
+
+def load_and_plot_is(parent_dir, sweep_name, temp_points=None, bias_points=None, run_num=None, 
+                     log_y_left=True, log_y_right=False, y_range_left=None, y_range_right=None):
+    import pandas as pd
+    import re
+    from pathlib import Path
+    
+    data_dir = Path(parent_dir) / sweep_name
+    plot_data = []
+    
+    if not data_dir.exists():
+        print(f"Directory {data_dir} does not exist.")
+        return
+        
+    existing_files = sorted(data_dir.glob("run*.csv"))
+    for file in existing_files:
+        if "_CV_" in file.name or "TimeScan" in file.name:
+            continue
+            
+        run_match = re.search(r"run(\d+)_", file.name)
+        if run_match:
+            r_num = int(run_match.group(1))
+            if run_num is not None and len(run_num) > 0 and r_num not in run_num:
+                continue
+                
+        temp_match = re.search(r"_temp_(\d+)", file.name)
+        bias_match = re.search(r"_DC_(neg|pos|)(\d+\.\d+)V", file.name)
+        
+        t_val = float(temp_match.group(1)) if temp_match else 295.0
+        if bias_match:
+            sign = -1.0 if bias_match.group(1) == "neg" else 1.0
+            b_val = sign * float(bias_match.group(2))
+        else:
+            b_val = 0.0
+            
+        # Tolerance filtering
+        if temp_points is not None and len(temp_points) > 0:
+            if not any(abs(t_val - t_target) <= 0.5 for t_target in temp_points):
+                continue
+        if bias_points is not None and len(bias_points) > 0:
+            if not any(abs(b_val - b_target) <= 0.1 for b_target in bias_points):
+                continue
+                
+        try:
+            df = pd.read_csv(file, comment='#', header=None, skipinitialspace=True)
+            if len(df.columns) >= 6:
+                plot_data.append({
+                    "temp": t_val, "bias": b_val,
+                    "freq": df.iloc[:, 2].values, "Z": df.iloc[:, 4].values, "theta": df.iloc[:, 5].values,
+                    "run": r_num if run_match else 0
+                })
+        except Exception:
+            pass
+            
+    plot_is_overlay(plot_data, temp_points if temp_points else [d['temp'] for d in plot_data], 
+                    bias_points if bias_points else [d['bias'] for d in plot_data], 
+                    title=f"Saved IS Data - {sweep_name}", 
+                    log_y_left=log_y_left, log_y_right=log_y_right,
+                    y_range_left=y_range_left, y_range_right=y_range_right)
+
+
+def load_and_plot_cv(parent_dir, sweep_name, temp_points=None, freq_points=None, run_num=None, 
+                     log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None):
+    import pandas as pd
+    import re
+    from pathlib import Path
+    
+    data_dir = Path(parent_dir) / sweep_name
+    plot_data = []
+    
+    if not data_dir.exists():
+        print(f"Directory {data_dir} does not exist.")
+        return
+        
+    existing_files = sorted(data_dir.glob("run*_CV_*.csv"))
+    for file in existing_files:
+        run_match = re.search(r"run(\d+)_", file.name)
+        if run_match:
+            r_num = int(run_match.group(1))
+            if run_num is not None and len(run_num) > 0 and r_num not in run_num:
+                continue
+                
+        temp_match = re.search(r"_temp_(\d+)", file.name)
+        freq_match = re.search(r"_freq_(\d+)Hz", file.name)
+        cycle_match = re.search(r"_cycle_(\d+)", file.name)
+        
+        t_val = float(temp_match.group(1)) if temp_match else 295.0
+        f_val = float(freq_match.group(1)) if freq_match else 1e4
+        c_val = int(cycle_match.group(1)) if cycle_match else 1
+        
+        # Tolerance filtering
+        if temp_points is not None and len(temp_points) > 0:
+            if not any(abs(t_val - t_target) <= 0.5 for t_target in temp_points):
+                continue
+        if freq_points is not None and len(freq_points) > 0:
+            if not any(abs(f_val - f_target) <= 1.0 for f_target in freq_points):
+                continue
+                
+        try:
+            df = pd.read_csv(file, comment='#', header=None, skipinitialspace=True)
+            if len(df.columns) >= 6:
+                plot_data.append({
+                    "temp": t_val, "cycle": c_val, "freq": f_val,
+                    "bias": df.iloc[:, 1].values, "Cp": df.iloc[:, 4].values, "Gp": df.iloc[:, 5].values,
+                    "run": r_num if run_match else 0
+                })
+        except Exception:
+            pass
+
+    plot_cv_overlay(plot_data, temp_points if temp_points else [d['temp'] for d in plot_data], 
+                    freq_points if freq_points else [d['freq'] for d in plot_data], 
+                    title=f"Saved CV Data - {sweep_name}", 
+                    log_y_left=log_y_left, log_y_right=log_y_right,
+                    y_range_left=y_range_left, y_range_right=y_range_right)
+
+
+def load_and_plot_time_scan(parent_dir, sweep_name, freq_points=None, Vdc_points=None, Vrms_points=None, run_num=None, 
+                            log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None):
+    import pandas as pd
+    import re
+    from pathlib import Path
+    
+    data_dir = Path(parent_dir) / sweep_name
+    plot_data = []
+    
+    if not data_dir.exists():
+        print(f"Directory {data_dir} does not exist.")
+        return
+        
+    existing_files = sorted(data_dir.glob("run*_TimeScan_*.csv"))
+    for file in existing_files:
+        run_match = re.search(r"run(\d+)_", file.name)
+        if run_match:
+            r_num = int(run_match.group(1))
+            if run_num is not None and len(run_num) > 0 and r_num not in run_num:
+                continue
+                
+        freq_match = re.search(r"_freq_(\d+\.\d+)Hz", file.name)
+        vdc_match = re.search(r"_DC_(neg|pos|)(\d+\.\d+)V", file.name)
+        vrms_match = re.search(r"_VAC_(\d+\.\d+)V", file.name)
+        
+        f_val = float(freq_match.group(1)) if freq_match else 1e4
+        if vdc_match:
+            sign = -1.0 if vdc_match.group(1) == "neg" else 1.0
+            vdc_val = sign * float(vdc_match.group(2))
+        else:
+            vdc_val = 0.0
+        vrms_val = float(vrms_match.group(1)) if vrms_match else 0.05
+        
+        # Tolerance filtering
+        if freq_points is not None and len(freq_points) > 0:
+            if not any(abs(f_val - f_target) <= 1.0 for f_target in freq_points):
+                continue
+        if Vdc_points is not None and len(Vdc_points) > 0:
+            if not any(abs(vdc_val - b_target) <= 0.1 for b_target in Vdc_points):
+                continue
+        if Vrms_points is not None and len(Vrms_points) > 0:
+            if not any(abs(vrms_val - v_target) <= 0.01 for v_target in Vrms_points):
+                continue
+                
+        try:
+            df = pd.read_csv(file, comment='#', header=None, skipinitialspace=True)
+            if len(df.columns) >= 6:
+                plot_data.append({
+                    "time": df.iloc[:, 0].values, "freq": f_val, "bias": vdc_val, "vrms": vrms_val,
+                    "Z": df.iloc[:, 4].values, "theta": df.iloc[:, 5].values,
+                    "run": r_num if run_match else 0
+                })
+        except Exception:
+            pass
+            
+    plot_time_scan_overlay(plot_data, title=f"Saved Time Scan Data - {sweep_name}", 
+                           log_y_left=log_y_left, log_y_right=log_y_right,
+                           y_range_left=y_range_left, y_range_right=y_range_right)
 
 # =============================================================================
 # =============================================================================
