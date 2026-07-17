@@ -288,8 +288,20 @@ class E4890A(LCR):
         self.resource.write(f"TRIG:SOUR {self._trigger_source}")
 
 
+
+    @property
+    def correction_length(self):
+        return float(self.resource.query("CORR:LENG?").strip())
+
+    @correction_length.setter
+    def correction_length(self, length):
+        if length not in [0, 1, 2, 4]:
+            raise ValueError("Cable length correction must be 0, 1, 2, or 4 meters.")
+        self.resource.write(f"CORR:LENG {length}")
+
     @property
     def correction_open_enabled(self):
+
         return self.resource.query("CORR:OPEN:STAT?").strip() == "1"
 
     @correction_open_enabled.setter
