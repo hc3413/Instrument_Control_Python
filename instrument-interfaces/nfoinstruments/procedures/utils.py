@@ -1716,7 +1716,7 @@ def run_time_scan_with_live_plot(parent_dir, sweep_name, freq_points, Vdc_points
                             current_dict["Z"] = np.array(current_Z)
                             current_dict["theta"] = np.array(current_theta)
                             
-                            plot_time_scan_overlay(plot_data, title=f\"Live Drift - Run {run_count}\", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
+                            plot_time_scan_overlay(plot_data, title=f"Live Drift - Run {run_count}", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
                             last_plot_time = now
                             
                 print(f"  ✓ Saved: {filename.name}")
@@ -1725,7 +1725,7 @@ def run_time_scan_with_live_plot(parent_dir, sweep_name, freq_points, Vdc_points
                 current_dict["time"] = np.array(current_time)
                 current_dict["Z"] = np.array(current_Z)
                 current_dict["theta"] = np.array(current_theta)
-                plot_time_scan_overlay(plot_data, title=f\"Live Drift - Run {run_count}\", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
+                plot_time_scan_overlay(plot_data, title=f"Live Drift - Run {run_count}", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
                 
                 run_count += 1
                 
