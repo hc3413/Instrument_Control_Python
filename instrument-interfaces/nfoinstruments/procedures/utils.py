@@ -857,7 +857,7 @@ def plot_cv_comparison(data_dir, pattern="run*.csv", file_indices=None,
 # =============================================================================
 
 def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements", 
-                    log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None):
+                    log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
     import matplotlib.pyplot as plt
     import numpy as np
     from IPython.display import display, clear_output
@@ -884,6 +884,15 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
     for pd_dict in plot_data:
         t_val, b_val = pd_dict["temp"], pd_dict["bias"]
         f_arr, Z_arr, theta_arr = pd_dict["freq"], pd_dict["Z"], pd_dict["theta"]
+        
+        if remove_outliers:
+            valid = (Z_arr >= 0) & (Z_arr <= 1e10) & (theta_arr >= -180) & (theta_arr <= 180)
+            f_arr = f_arr[valid]
+            Z_arr = Z_arr[valid]
+            theta_arr = theta_arr[valid]
+            
+            if len(f_arr) == 0:
+                continue
         
         color = cmap(norm_temp(t_val)) if len(set(all_temps)) > 1 else cmap(0.5)
         try:
@@ -932,7 +941,7 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
     ax_mag.set(xlabel="Frequency (Hz)", ylabel="|Z| (Ω)", title="Bode Plot: Magnitude")
     ax_mag.grid(True, which="both", ls="--", alpha=0.5)
     
-    ax_phase.set(xlabel="Frequency (Hz)", ylabel="Phase $\\theta$ (°)", title="Bode Plot: Phase")
+    ax_phase.set(xlabel="Frequency (Hz)", ylabel="Phase $\theta$ (°)", title="Bode Plot: Phase")
     ax_phase.grid(True, which="both", ls="--", alpha=0.5)
     
     ax_m_real.set(xlabel="Frequency (Hz)", ylabel="M' / $C_0$", title="Modulus: Real Part")
@@ -951,7 +960,7 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
 
 
 def plot_cv_overlay(plot_data, temp_points, freq_points, title="CV Measurements", 
-                    log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None):
+                    log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
     import matplotlib.pyplot as plt
     import numpy as np
     from IPython.display import display, clear_output
@@ -1017,7 +1026,7 @@ def plot_cv_overlay(plot_data, temp_points, freq_points, title="CV Measurements"
 
 
 def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)", 
-                           log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None):
+                           log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
     import matplotlib.pyplot as plt
     import numpy as np
     from IPython.display import display, clear_output
@@ -1044,6 +1053,15 @@ def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)",
         freq = pd_dict["freq"]
         bias = pd_dict["bias"]
         vrms = pd_dict["vrms"]
+        
+        if remove_outliers:
+            valid = (Z_arr >= 0) & (Z_arr <= 1e10) & (theta_arr >= -180) & (theta_arr <= 180)
+            t_arr = t_arr[valid]
+            Z_arr = Z_arr[valid]
+            theta_arr = theta_arr[valid]
+            
+            if len(t_arr) == 0:
+                continue
         
         color = cmap(i / max(1, len(plot_data)))
         
@@ -1088,7 +1106,7 @@ def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)",
     ax_mag.set(xlabel="Time (s)", ylabel="|Z| (Ω)", title="Magnitude vs Time")
     ax_mag.grid(True, ls="--", alpha=0.5)
     
-    ax_phase.set(xlabel="Time (s)", ylabel="Phase $\\theta$ (°)", title="Phase vs Time")
+    ax_phase.set(xlabel="Time (s)", ylabel="Phase $\theta$ (°)", title="Phase vs Time")
     ax_phase.grid(True, ls="--", alpha=0.5)
     
     ax_m_real.set(xlabel="Time (s)", ylabel="M' / $C_0$", title="Modulus Real vs Time")
@@ -1110,7 +1128,7 @@ def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)",
 # =============================================================================
 
 def load_and_plot_is(parent_dir, sweep_name, temp_points=None, bias_points=None, run_num=None, 
-                     log_y_left=True, log_y_right=False, y_range_left=None, y_range_right=None):
+                     log_y_left=True, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
     import pandas as pd
     import re
     from pathlib import Path
@@ -1143,7 +1161,6 @@ def load_and_plot_is(parent_dir, sweep_name, temp_points=None, bias_points=None,
         else:
             b_val = 0.0
             
-        # Tolerance filtering
         if temp_points is not None and len(temp_points) > 0:
             if not any(abs(t_val - t_target) <= 0.5 for t_target in temp_points):
                 continue
@@ -1166,11 +1183,10 @@ def load_and_plot_is(parent_dir, sweep_name, temp_points=None, bias_points=None,
                     bias_points if bias_points else [d['bias'] for d in plot_data], 
                     title=f"Saved IS Data - {sweep_name}", 
                     log_y_left=log_y_left, log_y_right=log_y_right,
-                    y_range_left=y_range_left, y_range_right=y_range_right)
-
+                    y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
 
 def load_and_plot_cv(parent_dir, sweep_name, temp_points=None, freq_points=None, run_num=None, 
-                     log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None):
+                     log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
     import pandas as pd
     import re
     from pathlib import Path
@@ -1198,7 +1214,6 @@ def load_and_plot_cv(parent_dir, sweep_name, temp_points=None, freq_points=None,
         f_val = float(freq_match.group(1)) if freq_match else 1e4
         c_val = int(cycle_match.group(1)) if cycle_match else 1
         
-        # Tolerance filtering
         if temp_points is not None and len(temp_points) > 0:
             if not any(abs(t_val - t_target) <= 0.5 for t_target in temp_points):
                 continue
@@ -1221,11 +1236,10 @@ def load_and_plot_cv(parent_dir, sweep_name, temp_points=None, freq_points=None,
                     freq_points if freq_points else [d['freq'] for d in plot_data], 
                     title=f"Saved CV Data - {sweep_name}", 
                     log_y_left=log_y_left, log_y_right=log_y_right,
-                    y_range_left=y_range_left, y_range_right=y_range_right)
-
+                    y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
 
 def load_and_plot_time_scan(parent_dir, sweep_name, freq_points=None, Vdc_points=None, Vrms_points=None, run_num=None, 
-                            log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None):
+                            log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
     import pandas as pd
     import re
     from pathlib import Path
@@ -1257,7 +1271,6 @@ def load_and_plot_time_scan(parent_dir, sweep_name, freq_points=None, Vdc_points
             vdc_val = 0.0
         vrms_val = float(vrms_match.group(1)) if vrms_match else 0.05
         
-        # Tolerance filtering
         if freq_points is not None and len(freq_points) > 0:
             if not any(abs(f_val - f_target) <= 1.0 for f_target in freq_points):
                 continue
@@ -1281,9 +1294,9 @@ def load_and_plot_time_scan(parent_dir, sweep_name, freq_points=None, Vdc_points
             
     plot_time_scan_overlay(plot_data, title=f"Saved Time Scan Data - {sweep_name}", 
                            log_y_left=log_y_left, log_y_right=log_y_right,
-                           y_range_left=y_range_left, y_range_right=y_range_right)
+                           y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
 
-# =============================================================================
+
 # =============================================================================
 # Automated Measurement Sequences with Live Plotting
 # =============================================================================
@@ -1291,7 +1304,7 @@ def load_and_plot_time_scan(parent_dir, sweep_name, freq_points=None, Vdc_points
 
 def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_points, bias_points, 
                                               janis_ctrl, lcr_ctrl, freq_points, Vrms=0.05, 
-                                              filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30, log_y_left=True, log_y_right=False):
+                                              filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30, log_y_left=True, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
     """
     Runs a temperature and bias sweep, with live plotting of Bode and Modulus plots.
     Loads existing data from the directory to overlay.
@@ -1430,7 +1443,7 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
             })
             run_count += 1
             
-            plot_is_overlay(plot_data, temp_points, bias_points, title=f"Live IS - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right)
+            plot_is_overlay(plot_data, temp_points, bias_points, title=f"Live IS - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
             
     print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger BUS)...")
     lcr_ctrl.signal_amplitude = 0.0
@@ -1445,7 +1458,7 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
 
 def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points, 
                                 Vmin, Vmax, Vstep, Vrms, cycles, janis_ctrl, lcr_ctrl, 
-                                filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30, log_y_left=True, log_y_right=False):
+                                filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30, log_y_left=True, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
     """
     Runs a temperature and CV sweep, with live plotting of Cp and Gp vs DC Bias.
     Loads existing data from the directory to overlay.
@@ -1567,7 +1580,7 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
                 })
                 run_count += 1
                 
-                plot_cv_overlay(plot_data, temp_points, freq_points, title=f"Live CV - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right)
+                plot_cv_overlay(plot_data, temp_points, freq_points, title=f"Live CV - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
                 
     print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger BUS)...")
     lcr_ctrl.signal_amplitude = 0.0
@@ -1584,7 +1597,7 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
 def run_time_scan_with_live_plot(parent_dir, sweep_name, freq_points, Vdc_points, Vrms_points, 
                                  scan_duration, janis_ctrl, lcr_ctrl, 
                                  update_interval=2.0, filename_suffix='', run_count_start=1, run_select=None,
-                                 log_y_left=False, log_y_right=False):
+                                 log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
     """
     Runs a time scan at a fixed frequency and DC bias, monitoring Z and theta over time.
     Loops through combinations of freq, Vdc, Vrms.
@@ -1703,8 +1716,7 @@ def run_time_scan_with_live_plot(parent_dir, sweep_name, freq_points, Vdc_points
                             current_dict["Z"] = np.array(current_Z)
                             current_dict["theta"] = np.array(current_theta)
                             
-                            plot_time_scan_overlay(plot_data, title=f"Live Drift - Run {run_count}", 
-                                                   log_y_left=log_y_left, log_y_right=log_y_right)
+                            plot_time_scan_overlay(plot_data, title=f\"Live Drift - Run {run_count}\", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
                             last_plot_time = now
                             
                 print(f"  ✓ Saved: {filename.name}")
@@ -1713,8 +1725,7 @@ def run_time_scan_with_live_plot(parent_dir, sweep_name, freq_points, Vdc_points
                 current_dict["time"] = np.array(current_time)
                 current_dict["Z"] = np.array(current_Z)
                 current_dict["theta"] = np.array(current_theta)
-                plot_time_scan_overlay(plot_data, title=f"Live Drift - Run {run_count}", 
-                                       log_y_left=log_y_left, log_y_right=log_y_right)
+                plot_time_scan_overlay(plot_data, title=f\"Live Drift - Run {run_count}\", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
                 
                 run_count += 1
                 
