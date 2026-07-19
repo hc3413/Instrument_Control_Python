@@ -1594,13 +1594,14 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
     return run_count
 
 
-def run_time_scan_with_live_plot(parent_dir, sweep_name, freq_points, Vdc_points, Vrms_points, 
+def run_time_scan_with_live_plot(parent_dir, sweep_name, temp_points, freq_points, Vdc_points, Vrms_points, 
                                  scan_duration, janis_ctrl, lcr_ctrl, 
-                                 update_interval=2.0, filename_suffix='', run_count_start=1, run_select=None,
-                                 log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
+                                 update_interval=2.0, filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30,
+                                 log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False, Z_threshold=None):
     """
-    Runs a time scan at a fixed frequency and DC bias, monitoring Z and theta over time.
-    Loops through combinations of freq, Vdc, Vrms.
+    Runs a time scan at fixed frequencies and DC biases, monitoring Z and theta over time.
+    Loops through combinations of temp, freq, Vdc, Vrms.
+    Includes an optional Z_threshold for software-level compliance (aborting scan to prevent runaway).
     """
     import time
     import numpy as np
@@ -1655,86 +1656,112 @@ def run_time_scan_with_live_plot(parent_dir, sweep_name, freq_points, Vdc_points
             print(f"Warning: Failed to load {file.name} for overlay: {e}")
 
     run_count = run_count_start
-    actual_temp = janis_ctrl.temperature if janis_ctrl else 295.0
-    
     lcr_ctrl.measurement_type = lcr_ctrl.MeasurementType.ZTD
     
-    for vrms in Vrms_points:
-        for vdc in Vdc_points:
-            for freq in freq_points:
-                print(f"\n{'='*60}")
-                print(f"Time Scan: {freq} Hz, {vdc:+.2f} VDC, {vrms} VAC for {scan_duration}s")
-                print('='*60)
-                
-                lcr_ctrl.signal_amplitude = vrms
-                lcr_ctrl.bias = vdc
-                lcr_ctrl.frequency = freq
-                lcr_ctrl.trigger_source = 'BUS'
-                time.sleep(0.5)
-                
-                bias_str = f"neg{abs(vdc):.2f}" if vdc < 0 else f"pos{vdc:.2f}"
-                filename = data_dir / f"run{run_count:03d}_TimeScan_temp_{actual_temp:.0f}_freq_{freq:.2f}Hz_DC_{bias_str}V_VAC_{vrms:.3f}V{filename_suffix}.csv"
-                print(f"  Measuring -> {filename.name} ...")
-                
-                current_time = []
-                current_Z = []
-                current_theta = []
-                
-                with open(filename, "w") as f:
-                    f.write("# Type: Time_Scan\n")
-                    f.write(f"# Frequency: {freq} Hz\n")
-                    f.write(f"# Vrms: {vrms} V\n")
-                    f.write(f"# Vdc: {vdc} V\n")
-                    f.write("# time,bias,frequency,NA,Z,theta,temp\n")
+    for target_temp in temp_points:
+        print(f"\n{'='*60}")
+        print(f"Temperature: {target_temp} K")
+        print('='*60)
+        
+        actual_temp = target_temp
+        if janis_ctrl:
+            actual_temp = janis_ctrl.temperature
+            if target_temp != actual_temp:
+                from .utils import set_temperature_and_wait
+                actual_temp = set_temperature_and_wait(janis_ctrl, target_temp, extra_settle_time=extra_settle_time, verbose=True)
+            else:
+                print(f"Already at target temperature ({actual_temp} K).")
+        
+        for vrms in Vrms_points:
+            for vdc in Vdc_points:
+                for freq in freq_points:
+                    print(f"\n{'='*60}")
+                    print(f"Time Scan: {freq} Hz, {vdc:+.2f} VDC, {vrms} VAC for {scan_duration}s")
+                    print('='*60)
                     
-                    start_time = time.time()
-                    last_plot_time = start_time
+                    lcr_ctrl.signal_amplitude = vrms
+                    lcr_ctrl.bias = vdc
+                    lcr_ctrl.frequency = freq
+                    lcr_ctrl.trigger_source = 'BUS'
+                    time.sleep(0.5)
                     
-                    # Create dictionary in plot_data early so we can update it in place
-                    current_dict = {
-                        "time": np.array([]), "freq": freq, "bias": vdc, "vrms": vrms,
-                        "Z": np.array([]), "theta": np.array([]), "run": run_count
-                    }
-                    plot_data.append(current_dict)
+                    bias_str = f"neg{abs(vdc):.2f}" if vdc < 0 else f"pos{vdc:.2f}"
+                    filename = data_dir / f"run{run_count:03d}_TimeScan_temp_{actual_temp:.0f}_freq_{freq:.2f}Hz_DC_{bias_str}V_VAC_{vrms:.3f}V{filename_suffix}.csv"
+                    print(f"  Measuring -> {filename.name} ...")
                     
-                    while (time.time() - start_time) < scan_duration:
-                        lcr_ctrl.resource.write("*TRG")
-                        result = lcr_ctrl.measurement
-                        now = time.time()
+                    current_time = []
+                    current_Z = []
+                    current_theta = []
+                    
+                    with open(filename, "w") as f:
+                        f.write("# Type: Time_Scan\n")
+                        f.write(f"# Frequency: {freq} Hz\n")
+                        f.write(f"# Vrms: {vrms} V\n")
+                        f.write(f"# Vdc: {vdc} V\n")
+                        f.write("# time,bias,frequency,NA,Z,theta,temp\n")
                         
-                        data_line = f"{now},{vdc},{freq},-1,{result[0]},{result[1]},{actual_temp}\n"
-                        f.write(data_line)
-                        f.flush()
+                        start_time = time.time()
+                        last_plot_time = start_time
                         
-                        current_time.append(now)
-                        current_Z.append(result[0])
-                        current_theta.append(result[1])
+                        current_dict = {
+                            "time": np.array([]), "freq": freq, "bias": vdc, "vrms": vrms,
+                            "Z": np.array([]), "theta": np.array([]), "run": run_count
+                        }
+                        plot_data.append(current_dict)
                         
-                        if (now - last_plot_time) > update_interval:
-                            # Update dictionary and plot
-                            current_dict["time"] = np.array(current_time)
-                            current_dict["Z"] = np.array(current_Z)
-                            current_dict["theta"] = np.array(current_theta)
+                        while (time.time() - start_time) < scan_duration:
+                            lcr_ctrl.resource.write("*TRG")
+                            result = lcr_ctrl.measurement
+                            now = time.time()
                             
-                            plot_time_scan_overlay(plot_data, title=f"Live Drift - Run {run_count}", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
-                            last_plot_time = now
+                            z_mag = result[0]
+                            theta = result[1]
                             
-                print(f"  ✓ Saved: {filename.name}")
-                
-                # Final plot update
-                current_dict["time"] = np.array(current_time)
-                current_dict["Z"] = np.array(current_Z)
-                current_dict["theta"] = np.array(current_theta)
-                plot_time_scan_overlay(plot_data, title=f"Live Drift - Run {run_count}", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
-                
-                run_count += 1
-                
-    print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger BUS)...")
-    lcr_ctrl.signal_amplitude = 0.0
-    lcr_ctrl.bias = 0.0
-    lcr_ctrl.trigger_source = 'BUS'
-    time.sleep(0.5)
-    
+                            if Z_threshold is not None and z_mag < Z_threshold:
+                                print(f"\n[!] WARNING: Z_mag ({z_mag:.2f} ohms) dropped below threshold ({Z_threshold} ohms)!")
+                                print("    ABORTING MEASUREMENT TO PREVENT RUNAWAY CURRENT!")
+                                lcr_ctrl.signal_amplitude = 0.0
+                                lcr_ctrl.bias = 0.0
+                                lcr_ctrl.trigger_source = 'BUS'
+                                
+                                data_line = f"{now},{vdc},{freq},-1,{z_mag},{theta},{actual_temp}\n"
+                                f.write(data_line)
+                                current_time.append(now)
+                                current_Z.append(z_mag)
+                                current_theta.append(theta)
+                                break
+                            
+                            data_line = f"{now},{vdc},{freq},-1,{z_mag},{theta},{actual_temp}\n"
+                            f.write(data_line)
+                            f.flush()
+                            
+                            current_time.append(now)
+                            current_Z.append(z_mag)
+                            current_theta.append(theta)
+                            
+                            if (now - last_plot_time) > update_interval:
+                                current_dict["time"] = np.array(current_time)
+                                current_dict["Z"] = np.array(current_Z)
+                                current_dict["theta"] = np.array(current_theta)
+                                
+                                plot_time_scan_overlay(plot_data, title=f"Live Drift - Run {run_count}", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
+                                last_plot_time = now
+                                
+                    print(f"  ✓ Saved: {filename.name}")
+                    
+                    current_dict["time"] = np.array(current_time)
+                    current_dict["Z"] = np.array(current_Z)
+                    current_dict["theta"] = np.array(current_theta)
+                    plot_time_scan_overlay(plot_data, title=f"Live Drift - Run {run_count}", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
+                    
+                    run_count += 1
+                    
+        print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger BUS)...")
+        lcr_ctrl.signal_amplitude = 0.0
+        lcr_ctrl.bias = 0.0
+        lcr_ctrl.trigger_source = 'BUS'
+        time.sleep(0.5)
+        
     print(f"\n{'='*60}")
     print(f"✓ TIME SCAN MEASUREMENTS COMPLETE! Next run: {run_count}")
     print('='*60)
