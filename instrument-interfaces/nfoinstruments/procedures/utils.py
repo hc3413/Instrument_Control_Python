@@ -1478,16 +1478,22 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
         print(f"Temperature: {target_temp} K")
         print('='*60)
         
-        actual_temp = janis_ctrl.temperature
-        if target_temp != actual_temp:
-            # We don't want to import set_temperature_and_wait due to scope issues, we can just call it
-            # But we need it imported. We'll import it directly:
-            from .utils import set_temperature_and_wait, set_bias_and_wait
-            actual_temp = set_temperature_and_wait(janis_ctrl, target_temp, extra_settle_time=extra_settle_time, verbose=True)
+        actual_temp = target_temp
+        if janis_ctrl is not None:
+            actual_temp = janis_ctrl.temperature
+            if target_temp != actual_temp:
+                # We don't want to import set_temperature_and_wait due to scope issues, we can just call it
+                # But we need it imported. We'll import it directly:
+                from .utils import set_temperature_and_wait, set_bias_and_wait
+                actual_temp = set_temperature_and_wait(janis_ctrl, target_temp, extra_settle_time=extra_settle_time, verbose=True)
+            else:
+                print(f"Already at target temperature ({actual_temp} K).")
+                # import still needed for bias
+                from .utils import set_bias_and_wait
         else:
-            print(f"Already at target temperature ({actual_temp} K).")
-            # import still needed for bias
             from .utils import set_bias_and_wait
+            print(f"No Janis connected. Proceeding at {actual_temp} K.")
+
         
         for b_idx, bias in enumerate(bias_points):
             print(f"\n  Bias: {bias:+.2f} V")
@@ -1619,11 +1625,15 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
         print(f"Temperature: {target_temp} K")
         print('='*60)
         
-        actual_temp = janis_ctrl.temperature
-        if target_temp != actual_temp:
-            actual_temp = set_temperature_and_wait(janis_ctrl, target_temp, extra_settle_time=extra_settle_time, verbose=True)
+        actual_temp = target_temp
+        if janis_ctrl is not None:
+            actual_temp = janis_ctrl.temperature
+            if target_temp != actual_temp:
+                actual_temp = set_temperature_and_wait(janis_ctrl, target_temp, extra_settle_time=extra_settle_time, verbose=True)
+            else:
+                print(f"Already at target temperature ({actual_temp} K).")
         else:
-            print(f"Already at target temperature ({actual_temp} K).")
+            print(f"No Janis connected. Proceeding at {actual_temp} K.")
         
         for c in range(1, cycles + 1):
             print(f"\n  Cycle: {c}/{cycles}")
