@@ -855,33 +855,37 @@ def plot_cv_comparison(data_dir, pattern="run*.csv", file_indices=None,
 # =============================================================================
 # Standalone Plotting Functions
 # =============================================================================
-
 def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements", 
-                    log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
+                    log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False,
+                    C_plot=False, C_dev=None):
     import matplotlib.pyplot as plt
     import numpy as np
     from IPython.display import display, clear_output
     
     clear_output(wait=True)
-    fig, axs = plt.subplots(2, 2, figsize=(15, 10))
+    
+    if C_plot:
+        fig, axs = plt.subplots(3, 2, figsize=(15, 15))
+        ax_mag, ax_phase = axs[0, 0], axs[0, 1]
+        ax_m_real, ax_m_imag = axs[1, 0], axs[1, 1]
+        ax_c, ax_r = axs[2, 0], axs[2, 1]
+    else:
+        fig, axs = plt.subplots(2, 2, figsize=(15, 10))
+        ax_mag, ax_phase = axs[0, 0], axs[0, 1]
+        ax_m_real, ax_m_imag = axs[1, 0], axs[1, 1]
+        
     fig.suptitle(title, fontsize=16)
     
-    ax_mag, ax_phase = axs[0, 0], axs[0, 1]
-    ax_m_real, ax_m_imag = axs[1, 0], axs[1, 1]
-    
-    cmap = plt.get_cmap("viridis")
+    cmap = plt.get_cmap("tab10")
     linestyles = ["-", "--", ":", "-."]
     
-    all_temps = [d['temp'] for d in plot_data]
-    if len(all_temps) == 0:
+    if len(plot_data) == 0:
         print("No matching data found to plot.")
         display(fig)
         plt.close(fig)
         return
         
-    norm_temp = plt.Normalize(min(all_temps), max(all_temps)) if len(set(all_temps)) > 1 else plt.Normalize(0, 1)
-    
-    for pd_dict in plot_data:
+    for i, pd_dict in enumerate(plot_data):
         t_val, b_val = pd_dict["temp"], pd_dict["bias"]
         f_arr, Z_arr, theta_arr = pd_dict["freq"], pd_dict["Z"], pd_dict["theta"]
         
@@ -894,7 +898,7 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
             if len(f_arr) == 0:
                 continue
         
-        color = cmap(norm_temp(t_val)) if len(set(all_temps)) > 1 else cmap(0.5)
+        color = cmap(i % 10)
         try:
             ls_idx = bias_points.index(b_val) % len(linestyles) if (bias_points and b_val in bias_points) else 0
         except ValueError:
@@ -931,12 +935,53 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
         else:
             ax_m_imag.semilogx(f_arr, np.imag(M_complex), color=color, linestyle=ls, label=label)
 
+        if C_plot:
+            Y = 1.0 / Z_complex
+            C_p = np.imag(Y) / omega
+            R_p = 1.0 / np.real(Y)
+            
+            # Phase filtering logic
+            abs_theta = np.abs(theta_arr)
+            valid_c = abs_theta >= 3.0  # Hide C_p if phase is near 0 (pure resistor)
+            valid_r = abs_theta <= 87.0 # Hide R_p if phase is near 90 (pure capacitor)
+            
+            # Plot valid segments
+            f_c, c_valid = f_arr[valid_c], C_p[valid_c]
+            f_r, r_valid = f_arr[valid_r], R_p[valid_r]
+            
+            if log_y_left:
+                ax_c.loglog(f_c, np.abs(c_valid), color=color, linestyle=ls, label=label)
+                ax_r.loglog(f_r, np.abs(r_valid), color=color, linestyle=ls, label=label)
+            else:
+                ax_c.semilogx(f_c, c_valid, color=color, linestyle=ls, label=label)
+                ax_r.semilogx(f_r, r_valid, color=color, linestyle=ls, label=label)
+
+    if C_dev is not None and len(plot_data) > 0:
+        f_min = min([np.min(d["freq"]) for d in plot_data if len(d["freq"]) > 0])
+        f_max = max([np.max(d["freq"]) for d in plot_data if len(d["freq"]) > 0])
+        f_ideal = np.logspace(np.log10(f_min), np.log10(f_max), 100)
+        z_ideal = 1.0 / (2 * np.pi * f_ideal * C_dev)
+        if log_y_left:
+            ax_mag.loglog(f_ideal, z_ideal, color='red', linestyle='-', linewidth=2, label=f"C_dev={C_dev:.1e}F")
+        else:
+            ax_mag.semilogx(f_ideal, z_ideal, color='red', linestyle='-', linewidth=2, label=f"C_dev={C_dev:.1e}F")
+        
+        if C_plot:
+            if log_y_left:
+                ax_c.loglog(f_ideal, np.ones_like(f_ideal)*C_dev, color='red', linestyle='-', linewidth=2, label=f"C_dev={C_dev:.1e}F")
+            else:
+                ax_c.semilogx(f_ideal, np.ones_like(f_ideal)*C_dev, color='red', linestyle='-', linewidth=2, label=f"C_dev={C_dev:.1e}F")
+
     if y_range_left is not None:
         ax_mag.set_ylim(y_range_left)
         ax_m_real.set_ylim(y_range_left)
+        if C_plot:
+            ax_c.set_ylim(y_range_left)
     if y_range_right is not None:
         ax_phase.set_ylim(y_range_right)
         ax_m_imag.set_ylim(y_range_right)
+        if C_plot:
+            ax_r.set_ylim(y_range_right)
 
     ax_mag.set(xlabel="Frequency (Hz)", ylabel="|Z| (Ω)", title="Bode Plot: Magnitude")
     ax_mag.grid(True, which="both", ls="--", alpha=0.5)
@@ -950,6 +995,12 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
     ax_m_imag.set(xlabel="Frequency (Hz)", ylabel="M'' / $C_0$", title="Modulus: Imaginary Part")
     ax_m_imag.grid(True, which="both", ls="--", alpha=0.5)
     
+    if C_plot:
+        ax_c.set(xlabel="Frequency (Hz)", ylabel="Capacitance Cp (F)", title="Parallel Capacitance (Cp)")
+        ax_c.grid(True, which="both", ls="--", alpha=0.5)
+        ax_r.set(xlabel="Frequency (Hz)", ylabel="Resistance Rp (Ω)", title="Parallel Resistance (Rp)")
+        ax_r.grid(True, which="both", ls="--", alpha=0.5)
+    
     handles, labels = ax_mag.get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
     ax_mag.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
@@ -957,7 +1008,6 @@ def plot_is_overlay(plot_data, temp_points, bias_points, title="IS Measurements"
     plt.tight_layout()
     display(fig)
     plt.close(fig)
-
 
 def plot_cv_overlay(plot_data, temp_points, freq_points, title="CV Measurements", 
                     log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
@@ -970,23 +1020,20 @@ def plot_cv_overlay(plot_data, temp_points, freq_points, title="CV Measurements"
     fig.suptitle(title, fontsize=16)
     
     ax_cp, ax_gp = axs[0], axs[1]
-    cmap = plt.get_cmap("viridis")
+    cmap = plt.get_cmap("tab10")
     linestyles = ["-", "--", ":", "-."]
     
-    all_temps = [d['temp'] for d in plot_data]
-    if len(all_temps) == 0:
+    if len(plot_data) == 0:
         print("No matching data found to plot.")
         display(fig)
         plt.close(fig)
         return
         
-    norm_temp = plt.Normalize(min(all_temps), max(all_temps)) if len(set(all_temps)) > 1 else plt.Normalize(0, 1)
-    
-    for pd_dict in plot_data:
+    for i, pd_dict in enumerate(plot_data):
         t_val, c_val, f_val = pd_dict["temp"], pd_dict["cycle"], pd_dict["freq"]
         b_arr, cp_arr, gp_arr = pd_dict["bias"], pd_dict["Cp"], pd_dict["Gp"]
         
-        color = cmap(norm_temp(t_val)) if len(set(all_temps)) > 1 else cmap(0.5)
+        color = cmap(i % 10)
         try:
             ls_idx = freq_points.index(f_val) % len(linestyles) if (freq_points and f_val in freq_points) else 0
         except ValueError:
@@ -1024,21 +1071,27 @@ def plot_cv_overlay(plot_data, temp_points, freq_points, title="CV Measurements"
     display(fig)
     plt.close(fig)
 
-
 def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)", 
-                           log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
+                           log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False,
+                           C_plot=False, C_dev=None):
     import matplotlib.pyplot as plt
     import numpy as np
     from IPython.display import display, clear_output
     
     clear_output(wait=True)
-    fig, axs = plt.subplots(2, 2, figsize=(15, 10))
+    if C_plot:
+        fig, axs = plt.subplots(3, 2, figsize=(15, 15))
+        ax_mag, ax_phase = axs[0, 0], axs[0, 1]
+        ax_m_real, ax_m_imag = axs[1, 0], axs[1, 1]
+        ax_c, ax_r = axs[2, 0], axs[2, 1]
+    else:
+        fig, axs = plt.subplots(2, 2, figsize=(15, 10))
+        ax_mag, ax_phase = axs[0, 0], axs[0, 1]
+        ax_m_real, ax_m_imag = axs[1, 0], axs[1, 1]
+    
     fig.suptitle(title, fontsize=16)
     
-    ax_mag, ax_phase = axs[0, 0], axs[0, 1]
-    ax_m_real, ax_m_imag = axs[1, 0], axs[1, 1]
-    
-    cmap = plt.get_cmap("plasma")
+    cmap = plt.get_cmap("tab10")
     
     if len(plot_data) == 0:
         print("No matching data found to plot.")
@@ -1063,7 +1116,7 @@ def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)",
             if len(t_arr) == 0:
                 continue
         
-        color = cmap(i / max(1, len(plot_data)))
+        color = cmap(i % 10)
         
         label = f"{freq:.0f}Hz, {bias:+.2f}VDC, {vrms:.3f}VAC"
         if "run" in pd_dict:
@@ -1096,12 +1149,50 @@ def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)",
         else:
             ax_m_imag.plot(t_elapsed, np.imag(M_complex), color=color, label=label)
 
+        if C_plot:
+            Y = 1.0 / Z_complex
+            C_p = np.imag(Y) / omega
+            R_p = 1.0 / np.real(Y)
+            
+            # Phase filtering logic
+            abs_theta = np.abs(theta_arr)
+            valid_c = abs_theta >= 3.0  # Hide C_p if phase is near 0 (pure resistor)
+            valid_r = abs_theta <= 87.0 # Hide R_p if phase is near 90 (pure capacitor)
+            
+            t_c, c_valid = t_elapsed[valid_c], C_p[valid_c]
+            t_r, r_valid = t_elapsed[valid_r], R_p[valid_r]
+            
+            if log_y_left:
+                ax_c.semilogy(t_c, np.abs(c_valid), color=color, label=label)
+                ax_r.semilogy(t_r, np.abs(r_valid), color=color, label=label)
+            else:
+                ax_c.plot(t_c, c_valid, color=color, label=label)
+                ax_r.plot(t_r, r_valid, color=color, label=label)
+
+    if C_dev is not None and len(plot_data) > 0:
+        # Since time scan has a single freq for each line, but might vary across lines, we just draw horizontal ref line
+        # Actually Z_dev depends on frequency, if multiple frequencies are plotted, one Z_dev line per freq?
+        # A horizontal line for C_dev doesn't make sense on a Z vs time plot unless frequency is constant.
+        # But we can plot a C_dev line directly on the C_p plot if C_plot is True.
+        if C_plot:
+            t_min = 0
+            t_max = max([np.max(d["time"] - d["time"][0]) for d in plot_data if len(d["time"]) > 0])
+            t_ideal = np.array([t_min, t_max])
+            if log_y_left:
+                ax_c.semilogy(t_ideal, [C_dev, C_dev], color='red', linestyle='-', linewidth=2, label=f"C_dev={C_dev:.1e}F")
+            else:
+                ax_c.plot(t_ideal, [C_dev, C_dev], color='red', linestyle='-', linewidth=2, label=f"C_dev={C_dev:.1e}F")
+
     if y_range_left is not None:
         ax_mag.set_ylim(y_range_left)
         ax_m_real.set_ylim(y_range_left)
+        if C_plot:
+            ax_c.set_ylim(y_range_left)
     if y_range_right is not None:
         ax_phase.set_ylim(y_range_right)
         ax_m_imag.set_ylim(y_range_right)
+        if C_plot:
+            ax_r.set_ylim(y_range_right)
 
     ax_mag.set(xlabel="Time (s)", ylabel="|Z| (Ω)", title="Magnitude vs Time")
     ax_mag.grid(True, ls="--", alpha=0.5)
@@ -1114,6 +1205,12 @@ def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)",
     
     ax_m_imag.set(xlabel="Time (s)", ylabel="M'' / $C_0$", title="Modulus Imag vs Time")
     ax_m_imag.grid(True, ls="--", alpha=0.5)
+    
+    if C_plot:
+        ax_c.set(xlabel="Time (s)", ylabel="Capacitance Cp (F)", title="Parallel Capacitance (Cp)")
+        ax_c.grid(True, ls="--", alpha=0.5)
+        ax_r.set(xlabel="Time (s)", ylabel="Resistance Rp (Ω)", title="Parallel Resistance (Rp)")
+        ax_r.grid(True, ls="--", alpha=0.5)
     
     handles, labels = ax_mag.get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
@@ -1128,7 +1225,7 @@ def plot_time_scan_overlay(plot_data, title="Time Scan (Drift)",
 # =============================================================================
 
 def load_and_plot_is(parent_dir, sweep_name, temp_points=None, bias_points=None, run_num=None, 
-                     log_y_left=True, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
+                     log_y_left=True, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False, C_plot=False, C_dev=None):
     import pandas as pd
     import re
     from pathlib import Path
@@ -1183,10 +1280,10 @@ def load_and_plot_is(parent_dir, sweep_name, temp_points=None, bias_points=None,
                     bias_points if bias_points else [d['bias'] for d in plot_data], 
                     title=f"Saved IS Data - {sweep_name}", 
                     log_y_left=log_y_left, log_y_right=log_y_right,
-                    y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
+                    y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers, C_plot=C_plot, C_dev=C_dev)
 
 def load_and_plot_cv(parent_dir, sweep_name, temp_points=None, freq_points=None, run_num=None, 
-                     log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
+                     log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False, C_plot=False, C_dev=None):
     import pandas as pd
     import re
     from pathlib import Path
@@ -1236,10 +1333,10 @@ def load_and_plot_cv(parent_dir, sweep_name, temp_points=None, freq_points=None,
                     freq_points if freq_points else [d['freq'] for d in plot_data], 
                     title=f"Saved CV Data - {sweep_name}", 
                     log_y_left=log_y_left, log_y_right=log_y_right,
-                    y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
+                    y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers, C_plot=C_plot, C_dev=C_dev)
 
 def load_and_plot_time_scan(parent_dir, sweep_name, freq_points=None, Vdc_points=None, Vrms_points=None, run_num=None, 
-                            log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
+                            log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False, C_plot=False, C_dev=None):
     import pandas as pd
     import re
     from pathlib import Path
@@ -1294,7 +1391,7 @@ def load_and_plot_time_scan(parent_dir, sweep_name, freq_points=None, Vdc_points
             
     plot_time_scan_overlay(plot_data, title=f"Saved Time Scan Data - {sweep_name}", 
                            log_y_left=log_y_left, log_y_right=log_y_right,
-                           y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
+                           y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers, C_plot=C_plot, C_dev=C_dev)
 
 
 # =============================================================================
@@ -1304,7 +1401,7 @@ def load_and_plot_time_scan(parent_dir, sweep_name, freq_points=None, Vdc_points
 
 def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_points, bias_points, 
                                               janis_ctrl, lcr_ctrl, freq_points, Vrms=0.05, 
-                                              filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30, log_y_left=True, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
+                                              filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30, log_y_left=True, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False, C_plot=False, C_dev=None):
     """
     Runs a temperature and bias sweep, with live plotting of Bode and Modulus plots.
     Loads existing data from the directory to overlay.
@@ -1443,7 +1540,7 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
             })
             run_count += 1
             
-            plot_is_overlay(plot_data, temp_points, bias_points, title=f"Live IS - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
+            plot_is_overlay(plot_data, temp_points, bias_points, title=f"Live IS - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers, C_plot=C_plot, C_dev=C_dev)
             
     print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger BUS)...")
     lcr_ctrl.signal_amplitude = 0.0
@@ -1458,7 +1555,7 @@ def run_temperature_bias_sweep_with_live_plot(parent_dir, sweep_name, temp_point
 
 def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points, 
                                 Vmin, Vmax, Vstep, Vrms, cycles, janis_ctrl, lcr_ctrl, 
-                                filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30, log_y_left=True, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False):
+                                filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30, log_y_left=True, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False, C_plot=False, C_dev=None):
     """
     Runs a temperature and CV sweep, with live plotting of Cp and Gp vs DC Bias.
     Loads existing data from the directory to overlay.
@@ -1580,7 +1677,7 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
                 })
                 run_count += 1
                 
-                plot_cv_overlay(plot_data, temp_points, freq_points, title=f"Live CV - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
+                plot_cv_overlay(plot_data, temp_points, freq_points, title=f"Live CV - Latest Temp: {actual_temp:.0f}K", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers, C_plot=C_plot, C_dev=C_dev)
                 
     print("\nPutting LCR into true standby mode (0V AC, 0V DC, Trigger BUS)...")
     lcr_ctrl.signal_amplitude = 0.0
@@ -1597,7 +1694,7 @@ def run_cv_sweep_with_live_plot(parent_dir, sweep_name, temp_points, freq_points
 def run_time_scan_with_live_plot(parent_dir, sweep_name, temp_points, freq_points, Vdc_points, Vrms_points, 
                                  scan_duration, janis_ctrl, lcr_ctrl, 
                                  update_interval=2.0, filename_suffix='', run_count_start=1, run_select=None, extra_settle_time=30,
-                                 log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False, Z_threshold=None):
+                                 log_y_left=False, log_y_right=False, y_range_left=None, y_range_right=None, remove_outliers=False, Z_threshold=None, C_plot=False, C_dev=None):
     """
     Runs a time scan at fixed frequencies and DC biases, monitoring Z and theta over time.
     Loops through combinations of temp, freq, Vdc, Vrms.
@@ -1744,7 +1841,7 @@ def run_time_scan_with_live_plot(parent_dir, sweep_name, temp_points, freq_point
                                 current_dict["Z"] = np.array(current_Z)
                                 current_dict["theta"] = np.array(current_theta)
                                 
-                                plot_time_scan_overlay(plot_data, title=f"Live Drift - Run {run_count}", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
+                                plot_time_scan_overlay(plot_data, title=f"Live Drift - Run {run_count}", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers, C_plot=C_plot, C_dev=C_dev)
                                 last_plot_time = now
                                 
                     print(f"  ✓ Saved: {filename.name}")
@@ -1752,7 +1849,7 @@ def run_time_scan_with_live_plot(parent_dir, sweep_name, temp_points, freq_point
                     current_dict["time"] = np.array(current_time)
                     current_dict["Z"] = np.array(current_Z)
                     current_dict["theta"] = np.array(current_theta)
-                    plot_time_scan_overlay(plot_data, title=f"Live Drift - Run {run_count}", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers)
+                    plot_time_scan_overlay(plot_data, title=f"Live Drift - Run {run_count}", log_y_left=log_y_left, log_y_right=log_y_right, y_range_left=y_range_left, y_range_right=y_range_right, remove_outliers=remove_outliers, C_plot=C_plot, C_dev=C_dev)
                     
                     run_count += 1
                     
